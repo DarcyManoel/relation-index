@@ -10,7 +10,7 @@ function createPerson(){
 			children:[]
 		},
 	})
-	console.info(`Created new person of ID: ${persons.length-1}\n`,persons)
+	console.info(`Created new person of ID: ${persons.length-1}\n`,persons[persons.length-1])
 	selectPerson(persons.length-1)
 }
 let relationLinks={
@@ -83,16 +83,12 @@ function selectPerson(id){
 	renderPerson()
 }
 function renderPerson(){
-	if(!persons.length){
-		createPerson()
-	}
 	//	name
 	document.getElementById(`name`).querySelector(`#given`).innerHTML=persons[selectedPersonId].name?.given??`-`
 	document.getElementById(`name`).querySelector(`#family`).innerHTML=persons[selectedPersonId].name?.family??`-`
 	//	state
 	let personTimeline=persons[selectedPersonId].timeline??[]
 	let eventDates=Object.fromEntries(personTimeline.map(entry=>[entry.event,entry.date]))
-	console.log(eventDates)
 	document.getElementById(`state`).innerHTML=`
 		<strong>Born </strong>${!eventDates[`birth`]||!yearsSince(eventDates[`birth`])?`???`:Math.floor(yearsSince(eventDates[`birth`]))} years ago.<br>
 		${!eventDates[`death`]?``:`<strong>Died </strong>${yearsSince(eventDates[`death`])?Math.round(yearsSince(eventDates[`death`])):`???`} years ago. <subtle>${Math.floor(yearsSince(eventDates[`birth`])-yearsSince(eventDates[`death`]))} years old</subtle>`}`
@@ -144,7 +140,7 @@ function importData(){
 		reader.onload=()=>{
 			console.log(`Imported database: `,persons=JSON.parse(reader.result))
 			selectedPersonId=0
-			renderPerson()
+			processPersons()
 		}
 		reader.readAsText(e.target.files[0])
 		document.body.removeChild(fileInput)
@@ -203,4 +199,4 @@ let monthNames=[
 //	initialisation
 let initTime=new Date
 let selectedPersonId=0
-processPersons()
+createPerson()
