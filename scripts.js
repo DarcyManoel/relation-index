@@ -91,7 +91,7 @@ function renderPerson(){
 	let eventDates=Object.fromEntries(personTimeline.map(entry=>[entry.event,entry.date]))
 	document.getElementById(`state`).innerHTML=`
 		<strong>Born </strong>${!eventDates[`birth`]||!yearsSince(eventDates[`birth`])?`???`:Math.floor(yearsSince(eventDates[`birth`]))} years ago.<br>
-		${!eventDates[`death`]?``:`<strong>Died </strong>${yearsSince(eventDates[`death`])?Math.round(yearsSince(eventDates[`death`])):`???`} years ago. <subtle>${Math.floor(yearsSince(eventDates[`birth`])-yearsSince(eventDates[`death`]))} years old</subtle>`}`
+		${!eventDates[`death`]?`<br>`:`<strong>Died </strong>${yearsSince(eventDates[`death`])?Math.round(yearsSince(eventDates[`death`])):`???`} years ago. <subtle>${Math.floor(yearsSince(eventDates[`birth`])-yearsSince(eventDates[`death`]))} years old</subtle>`}`
 	//	relations
 	let personRelations=persons[selectedPersonId].relations??{}
 	document.getElementById(`Ancestral`).innerHTML=ancestralDisplayOrder.map(
