@@ -12,51 +12,51 @@
 body{
 	>#topbar{
 		>div{
-			display:flex;
-			font-size:1.25em;
-			gap:.5rem;
-		}
-		#editing{
-			>.switch{
-				>input{
-					height:0;
-					opacity:0;
-					width:0;
+			>#editing{
+				>.switch{
+					>input{
+						height:0;
+						opacity:0;
+						width:0;
+					}
+					>input:checked+.slider{
+						background-color:#33f;
+					}
+					>input:checked+.slider:before{
+						transform:translateX(1rem);
+					}
+					>.slider{
+						background-color:#ccc;
+						border-radius:1rem;
+						bottom:0;
+						cursor:pointer;
+						left:0;
+						position:absolute;
+						right:0;
+						top:0;
+						transition:.4s;
+					}
+					>.slider:before{
+						aspect-ratio:1;
+						background-color:white;
+						border-radius:50%;
+						bottom:4px;
+						content:'';
+						height:1rem;
+						left:4px;
+						position:absolute;
+						transition:.4s;
+					}
+					display:block;
+					height:1.5rem;
+					position:relative;
+					width:2.5rem;
 				}
-				>input:checked+.slider{
-					background-color:#33f;
-				}
-				>input:checked+.slider:before{
-					transform:translateX(1rem);
-				}
-				>.slider{
-					background-color:#ccc;
-					border-radius:1rem;
-					bottom:0;
-					cursor:pointer;
-					left:0;
-					position:absolute;
-					right:0;
-					top:0;
-					transition:.4s;
-				}
-				>.slider:before{
-					aspect-ratio:1;
-					background-color:white;
-					border-radius:50%;
-					bottom:4px;
-					content:'';
-					height:1rem;
-					left:4px;
-					position:absolute;
-					transition:.4s;
-				}
-				display:block;
-				height:1.5rem;
-				position:relative;
-				width:2.5rem;
+				display:flex;
+				gap:.5rem;
 			}
 			display:flex;
+			font-size:1.25em;
 			gap:.5rem;
 		}
 		background:white;
