@@ -6,28 +6,46 @@
 	</head>
 	<body spellcheck="false">
 		<div id="topbar">
-			<div></div>
 			<div>
 				<div class="button" onclick="importData()">Import</div>
 				<div class="button" onclick="exportData()">Export</div>
+			</div>
+			<div class="button">
+				<label id="editing">
+					<span>Edit Mode</span>
+					<label class="switch">
+						<input type="checkbox" onchange="for(let element of document.getElementsByClassName(`edit`))element.classList.toggle(`hidden`,!this.checked)"/>
+						<div class="slider"></div>
+					</label>
+				</label>
 			</div>
 		</div>
 		<div id="banner">
 			<div id="name">
 				<div id="given"></div>
 				<div id="family"></div>
+				<div class="edit button hidden" onclick="console.log(`test`)"></div>
 			</div>
 			<div id="state"></div>
 		</div>
 		<div id="content">
 			<div class="content-column">
-				<div id="Ancestral"></div>
+				<div id="Ancestral">
+					<div class="edit button hidden" onclick="console.log(`test`)"></div>
+					<div class="content"></div>
+				</div>
 			</div>
 			<div class="content-column">
-				<div id="Descendant"></div>
+				<div id="Descendant">
+					<div class="edit button hidden" onclick="console.log(`test`)"></div>
+					<div class="content"></div>
+				</div>
 			</div>
 			<div class="content-column">
-				<div id="Timeline"></div>
+				<div id="Timeline">
+					<div class="edit button hidden" onclick="console.log(`test`)"></div>
+					<div class="content"></div>
+				</div>
 			</div>
 		</div>
 	</body>

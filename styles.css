@@ -16,6 +16,49 @@ body{
 			font-size:1.25em;
 			gap:.5rem;
 		}
+		#editing{
+			>.switch{
+				>input{
+					height:0;
+					opacity:0;
+					width:0;
+				}
+				>input:checked+.slider{
+					background-color:#33f;
+				}
+				>input:checked+.slider:before{
+					transform:translateX(1rem);
+				}
+				>.slider{
+					background-color:#ccc;
+					border-radius:1rem;
+					bottom:0;
+					cursor:pointer;
+					left:0;
+					position:absolute;
+					right:0;
+					top:0;
+					transition:.4s;
+				}
+				>.slider:before{
+					aspect-ratio:1;
+					background-color:white;
+					border-radius:50%;
+					bottom:4px;
+					content:'';
+					height:1rem;
+					left:4px;
+					position:absolute;
+					transition:.4s;
+				}
+				display:block;
+				height:1.5rem;
+				position:relative;
+				width:2.5rem;
+			}
+			display:flex;
+			gap:.5rem;
+		}
 		background:white;
 		border-bottom:.4rem solid #00496f;
 		display:flex;
@@ -37,6 +80,12 @@ body{
 			>#family:empty:before{
 				content:'['attr(id)']';
 			}
+			>.edit{
+				position:absolute;
+				top:.5rem;
+				right:initial;
+				margin-left:.5rem;
+			}
 			font-size:2.5em;
 		}
 		background:white;
@@ -46,6 +95,10 @@ body{
 	>#content{
 		>.content-column{
 			>div{
+				>.content:empty:before{
+					content:'There are no records.';
+					display:block;
+				}
 				background:white;
 				border-radius:.5rem;
 				border:1px solid #aaa;
@@ -62,10 +115,6 @@ body{
 			}
 			>div:empty{
 				padding-bottom:2rem;
-			}
-			>div:empty:after{
-				content:'There are no records.';
-				display:block;
 			}
 			>#ancestral:before,
 			>#descendant:before{
@@ -101,9 +150,22 @@ div[onclick]{
 	transition:.25s;
 	user-select:none;
 }
-div[onclick]:hover{
+div[onclick]:hover,
+.button:hover{
 	background:#eee;
 	border:1px solid #aaa;
+}
+div:has(.edit){
+	>.edit{
+		position:absolute;
+		top:.5rem;
+		right:.5rem;
+		font-size:initial;
+	}
+	>.edit:before{
+		content:'edit';
+	}
+	position:relative;
 }
 strong{
 	font-family:UbuntuSansBold;
@@ -113,8 +175,23 @@ subtle{
 	opacity:.5;
 }
 .button{
+	*{
+		cursor:pointer;
+	}
+	border-radius:.5rem;
+	border:1px solid transparent;
+	cursor:pointer;
 	font-family:UbuntuSansBold;
 	padding:.2rem.4rem;
+	transition:.25s;
+	user-select:none;
+}
+.hidden{
+	opacity:none;
+	pointer-events:none;
+}
+.hidden:before{
+	content:''!important;
 }
 .hover-move{
 	padding-left:1rem;

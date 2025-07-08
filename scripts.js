@@ -94,14 +94,14 @@ function renderPerson(){
 		${!eventDates[`death`]?`<br>`:`<strong>Died </strong>${yearsSince(eventDates[`death`])?Math.round(yearsSince(eventDates[`death`])):`???`} years ago. <subtle>${Math.floor(yearsSince(eventDates[`birth`])-yearsSince(eventDates[`death`]))} years old</subtle>`}`
 	//	relations
 	let personRelations=persons[selectedPersonId].relations??{}
-	document.getElementById(`Ancestral`).innerHTML=ancestralDisplayOrder.map(
+	document.getElementById(`Ancestral`).querySelector(`.content`).innerHTML=ancestralDisplayOrder.map(
 		relationType=>!personRelations?.[relationType]?.length?``:`
 			<div id="${relationType}">
 				<div><strong>${capitaliseFirstLetter(relationType)}</strong></div>
 				${personRelations[relationType].sort().map(renderRelationEntry).join(``)}
 			</div>`
 		).join(``)
-	document.getElementById(`Descendant`).innerHTML=descendantDisplayOrder.map(
+	document.getElementById(`Descendant`).querySelector(`.content`).innerHTML=descendantDisplayOrder.map(
 		relationType=>!personRelations?.[relationType]?.length?``:`
 			<div id="${relationType}">
 				<div><strong>${capitaliseFirstLetter(relationType)}</strong></div>
@@ -109,7 +109,7 @@ function renderPerson(){
 			</div>`
 		).join(``)
 	//	timeline
-	document.getElementById(`Timeline`).innerHTML=!personTimeline.length?``:personTimeline.sort((a,b)=>[`year`,`month`,`day`].reduce((r,k)=>r||(a.date?.[k]??0)-(b.date?.[k]??0),0)).map(renderTimelineEntry).join(``)
+	document.getElementById(`Timeline`).querySelector(`.content`).innerHTML=!personTimeline.length?``:personTimeline.sort((a,b)=>[`year`,`month`,`day`].reduce((r,k)=>r||(a.date?.[k]??0)-(b.date?.[k]??0),0)).map(renderTimelineEntry).join(``)
 }
 function renderRelationEntry(id){
 	let{name}=persons[id]
@@ -138,8 +138,9 @@ function importData(){
 	fileInput.onchange=(e)=>{
 		let reader=new FileReader()
 		reader.onload=()=>{
-			console.log(`Imported database: `,persons=JSON.parse(reader.result))
 			selectedPersonId=0
+			persons=JSON.parse(reader.result)
+			console.log(`Imported database:`)
 			processPersons()
 		}
 		reader.readAsText(e.target.files[0])
