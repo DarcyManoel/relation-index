@@ -5,6 +5,18 @@
 		<title>Relation Index</title>
 	</head>
 	<body spellcheck="false">
+		<!-- modal -->
+		<div id="modal" class="hidden">
+			<div id="frame">
+				<div id="content"></div>
+				<div id="description"></div>
+				<div id="actions">
+					<div id="cancel" class="button" onclick="closeModal()">Cancel</div>
+					<div id="save" class="button">Save</div>
+				</div>
+			</div>
+		</div>
+		<!---->
 		<div id="topbar">
 			<div>
 				<div class="button" onclick="importData()">Import</div>
@@ -24,30 +36,31 @@
 			<div id="name">
 				<div id="given"></div>
 				<div id="family"></div>
-				<div class="edit button hidden" onclick="console.log(`test`)"></div>
+				<div class="edit button hidden" onclick="showModal(this)"></div>
 			</div>
 			<div id="state"></div>
 		</div>
 		<div id="content">
 			<div class="content-column">
 				<div id="Ancestral">
-					<div class="edit button hidden" onclick="console.log(`test`)"></div>
+					<div class="edit button hidden" onclick="showModal(this)"></div>
 					<div class="content"></div>
 				</div>
 			</div>
 			<div class="content-column">
 				<div id="Descendant">
-					<div class="edit button hidden" onclick="console.log(`test`)"></div>
+					<div class="edit button hidden" onclick="showModal(this)"></div>
 					<div class="content"></div>
 				</div>
 			</div>
 			<div class="content-column">
 				<div id="Timeline">
-					<div class="edit button hidden" onclick="console.log(`test`)"></div>
+					<div class="edit button hidden" onclick="showModal(this)"></div>
 					<div class="content"></div>
 				</div>
 			</div>
 		</div>
+		<!--  -->
 	</body>
 	<script type="text/javascript"src="scripts.js"></script>
 </html>

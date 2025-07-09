@@ -1,5 +1,7 @@
 *{
+	box-sizing:border-box;
 	outline:none;
+	transition:.25s;
 }
 @font-face{
 	font-family:UbuntuSans;
@@ -10,6 +12,62 @@
 	src:url(fonts/UbuntuSans-SemiBold.ttf);
 }
 body{
+	>#modal{
+		>#frame{
+			>#content{
+				>input{
+					border-radius:1rem;
+					border:1px solid black;
+					padding:0 1rem;
+					margin:.5em 0;
+					font-size:1em;
+					width:30ch;
+				}
+			}
+			>#description{
+				font-size:.75em;
+			}
+			>#actions{
+				>div{
+					color:initial;
+					flex:1;
+					padding:.25rem 1rem;
+					text-align:center;
+				}
+				>div:hover{
+					border-color:transparent;
+				}
+				>#cancel:hover{
+					background-color:#f44336;
+				}
+				>#save:hover{
+					background-color:#04aa6d;
+				}
+				display:flex;
+				gap:.5rem;
+				justify-content:center;
+				margin-top:.5rem;
+			}
+			background:white;
+			border-radius:2rem;
+			border:.2rem solid black;
+			box-shadow:0 0 1rem -.5rem black;
+			font-size:1.2em;
+			left:50%;
+			padding:1rem 2rem .5rem;
+			position:fixed;
+			top:40%;
+			translate:-50%-50%;
+			z-index:3;
+		}
+		backdrop-filter:brightness(.5);
+		height:100vh;
+		left:0;
+		position:fixed;
+		top:0;
+		width:100vw;
+		z-index:2;
+	}
 	>#topbar{
 		>div{
 			>#editing{
@@ -67,6 +125,7 @@ body{
 		padding:.5rem;
 		position:sticky;
 		top:0;
+		z-index:1;
 	}
 	>#banner{
 		>div{
@@ -130,6 +189,7 @@ body{
 	background:#eee;
 	font-family:UbuntuSans;
 	margin:0;
+	height:300vh;
 	overscroll-behavior:none;
 }
 details{
@@ -187,7 +247,7 @@ subtle{
 	user-select:none;
 }
 .hidden{
-	opacity:none;
+	opacity:0;
 	pointer-events:none;
 }
 .hidden:before{

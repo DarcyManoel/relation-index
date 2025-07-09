@@ -2,8 +2,8 @@ let persons=[]
 function createPerson(){
 	persons.push({
 		name:{
-			given:`Person`,
-			family:persons.length+1
+			given:[`Person`],
+			family:[persons.length+1]
 		},
 		relations:{
 			parents:[],
@@ -12,6 +12,42 @@ function createPerson(){
 	})
 	console.info(`Created new person of ID: ${persons.length-1}\n`,persons[persons.length-1])
 	selectPerson(persons.length-1)
+}
+function showModal(triggerElement){
+	document.getElementById(`modal`).classList.remove(`hidden`)
+	window[`edit${capitaliseFirstLetter(triggerElement.parentElement.id)}`]()
+}
+function closeModal(){
+	document.getElementById(`modal`).classList.add(`hidden`)
+}
+function editName(){
+	let fullName=Object.values(persons[selectedPersonId].name).map(nameType=>nameType.join(`-`)).join(` `)
+	document.getElementById(`frame`).querySelector(`#content`).innerHTML=`
+		<div><strong>Editing Name:</strong></div>
+		<input id="changeName" type="text" placeholder="${fullName}">`
+	document.getElementById(`frame`).querySelector(`#description`).innerHTML=`
+		Use a space to separate given and family names.<br>
+		Use dashes (-) to separate multiple names of the same type.<br>
+		For example: John-Jo Adams-Huck means given names John and Jo, and family names Adams and Huck.<br>
+		Multiple names per type are optional.`
+	document.getElementById(`frame`).querySelector(`#actions`).querySelector(`#save`).setAttribute(`onclick`,`saveName(document.getElementById('changeName').value)`)
+}
+function saveName(input){
+	if(!input)return
+	let[given,family]=input.trim().split(` `)
+	persons[selectedPersonId].name.given=given.split(`-`)
+	persons[selectedPersonId].name.family=family.split(`-`)
+	renderPerson()
+	closeModal()
+}
+function editAncestral(){
+	console.log(`test`)
+}
+function editDescendant(){
+	console.log(`test`)
+}
+function editTimeline(){
+	console.log(`test`)
 }
 let relationLinks={
 	children:`parents`,
@@ -84,8 +120,8 @@ function selectPerson(id){
 }
 function renderPerson(){
 	//	name
-	document.getElementById(`name`).querySelector(`#given`).innerHTML=persons[selectedPersonId].name?.given??`-`
-	document.getElementById(`name`).querySelector(`#family`).innerHTML=persons[selectedPersonId].name?.family??`-`
+	document.getElementById(`name`).querySelector(`#given`).innerHTML=persons[selectedPersonId].name?.given.join(`-`)??`-`
+	document.getElementById(`name`).querySelector(`#family`).innerHTML=persons[selectedPersonId].name?.family.join(`-`)??`-`
 	//	state
 	let personTimeline=persons[selectedPersonId].timeline??[]
 	let eventDates=Object.fromEntries(personTimeline.map(entry=>[entry.event,entry.date]))
@@ -113,7 +149,7 @@ function renderPerson(){
 }
 function renderRelationEntry(id){
 	let{name}=persons[id]
-	let fullName=Object.values(name).join(` `)
+	let fullName=Object.values(name).map(nameType=>nameType.join(`-`)).join(` `)
 	return`<div class="hover-move" onclick="selectPerson(${id})">${fullName}</div>`
 }
 function renderTimelineEntry(entry){
