@@ -19,6 +19,9 @@ function showModal(triggerElement){
 }
 function closeModal(){
 	document.getElementById(`modal`).classList.add(`hidden`)
+	document.getElementById(`frame`).querySelector(`#content`).innerHTML=``
+	document.getElementById(`frame`).querySelector(`#description`).innerHTML=``
+	document.getElementById(`frame`).querySelector(`#actions`).querySelector(`#save`).removeAttribute(`onclick`)
 }
 function editName(){
 	let fullName=Object.values(persons[selectedPersonId].name).map(nameType=>nameType.join(`-`)).join(` `)
