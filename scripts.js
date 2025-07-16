@@ -121,14 +121,10 @@ let descendantDisplayOrder=[
 function processRelations(relationType,realRelations,tempRelations){
 	let linkedRelationType=relationLinks[relationType]
 	for(let personId of realRelations){
-		if(!tempRelations.includes(personId)){
-			persons[personId].relations[linkedRelationType]=persons[personId].relations[linkedRelationType].filter(id=>id!==selectedPersonId)
-		}
+		persons[personId].relations[linkedRelationType]=(persons[personId].relations[linkedRelationType]??[]).filter(id=>id!==selectedPersonId)
 	}
 	for(let personId of tempRelations){
-		if(!realRelations.includes(personId)){
-			persons[personId].relations[linkedRelationType].push(selectedPersonId)
-		}
+		persons[personId].relations[linkedRelationType].push(selectedPersonId)
 	}
 }
 function processPersons(){
