@@ -8,6 +8,7 @@
 		<!-- modal -->
 		<div id="modal" class="hidden">
 			<div id="frame">
+				<div id="title"></div>
 				<div id="content"></div>
 				<div id="description"></div>
 				<div id="actions">
@@ -26,7 +27,7 @@
 				<label id="editing">
 					<span>Edit Mode</span>
 					<label class="switch">
-						<input type="checkbox" onchange="for(let element of document.getElementsByClassName(`edit`))element.classList.toggle(`hidden`,!this.checked)"/>
+						<input type="checkbox" onchange="editMode=this.checked;for(let element of document.getElementsByClassName(`edit`))element.classList.toggle(`hidden`,!editMode)"/>
 						<div class="slider"></div>
 					</label>
 				</label>
@@ -36,31 +37,29 @@
 			<div id="name">
 				<div id="given"></div>
 				<div id="family"></div>
-				<div class="edit button hidden" onclick="showModal(this)"></div>
+				<div class="edit button hidden" onclick="showModal();editName()"></div>
 			</div>
 			<div id="state"></div>
 		</div>
 		<div id="content">
 			<div class="content-column">
 				<div id="Ancestral">
-					<div class="edit button hidden" onclick="showModal(this)"></div>
 					<div class="content"></div>
 				</div>
 			</div>
 			<div class="content-column">
 				<div id="Descendant">
-					<div class="edit button hidden" onclick="showModal(this)"></div>
 					<div class="content"></div>
 				</div>
 			</div>
 			<div class="content-column">
 				<div id="Timeline">
-					<div class="edit button hidden" onclick="showModal(this)"></div>
+					<div class="edit button hidden" style="top:.5rem;right:.5rem;" onclick="showModal()"></div>
 					<div class="content"></div>
 				</div>
 			</div>
 		</div>
-		<!--  -->
+		<!---->
 	</body>
 	<script type="text/javascript"src="scripts.js"></script>
 </html>

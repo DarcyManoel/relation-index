@@ -15,18 +15,21 @@ function createPerson(){
 }
 function showModal(triggerElement){
 	document.getElementById(`modal`).classList.remove(`hidden`)
-	window[`edit${capitaliseFirstLetter(triggerElement.parentElement.id)}`]()
 }
 function closeModal(){
 	document.getElementById(`modal`).classList.add(`hidden`)
+	document.getElementById(`frame`).querySelector(`#title`).innerHTML=``
 	document.getElementById(`frame`).querySelector(`#content`).innerHTML=``
 	document.getElementById(`frame`).querySelector(`#description`).innerHTML=``
 	document.getElementById(`frame`).querySelector(`#actions`).querySelector(`#save`).removeAttribute(`onclick`)
+	tempRelations=[]
+	tempRelationsInitialised=0
 }
 function editName(){
 	let fullName=Object.values(persons[selectedPersonId].name).map(nameType=>nameType.join(`-`)).join(` `)
+	document.getElementById(`frame`).querySelector(`#title`).innerHTML=`
+		<div><strong>Editing Name:</strong></div>`
 	document.getElementById(`frame`).querySelector(`#content`).innerHTML=`
-		<div><strong>Editing Name:</strong></div>
 		<input id="changeName" type="text" placeholder="${fullName}">`
 	document.getElementById(`frame`).querySelector(`#description`).innerHTML=`
 		Use a space to separate given and family names.<br>
@@ -43,11 +46,42 @@ function saveName(input){
 	renderPerson()
 	closeModal()
 }
-function editAncestral(){
-	console.log(`test`)
+let tempRelationsInitialised=0
+let tempRelations=[]
+function editRelations(relationType){
+	if(!tempRelationsInitialised){
+		tempRelations=persons[selectedPersonId].relations[relationType]
+		tempRelationsInitialised=1
+	}
+	document.getElementById(`frame`).querySelector(`#title`).innerHTML=`
+		<div><strong>Editing Relations:</strong></div>`
+	document.getElementById(`frame`).querySelector(`#content`).innerHTML=`
+		<div style="display:flex;gap:.5rem;">
+			<div id="current-relations">${tempRelations.map(relation=>`<div class="hover-move hover-red" onclick="removeRelation('${relationType}',${relation})">${Object.values(persons[relation].name).map(nameType=>nameType.join(`-`)).join(` `)}</div>`).join(``)}</div>
+			<div id="prospective-relations">${persons.map(person=>person===persons[selectedPersonId]?``:`<div class="hover-move hover-green ${tempRelations.includes(persons.indexOf(person))?`hovered-move hovered-green hover-red" onclick="removeRelation('${relationType}',${persons.indexOf(person)})"`:`" onclick="addRelation('${relationType}',${persons.indexOf(person)})"`}">${Object.values(person.name).map(nameType=>nameType.join(`-`)).join(` `)}</div>`).join(``)}</div>
+		</div>`
+	document.getElementById(`frame`).querySelector(`#description`).innerHTML=`
+		The left panel displays all current relations of this type.<br>
+		The right panel allows you to search for and add other people from the database.<br>
+		Type a name in the search bar to filter available people.<br>
+		Click on an unselected person in the right panel to add them to the relation.<br>
+		Click on a person in the left panel to remove them from the relation.`
+	document.getElementById(`frame`).querySelector(`#actions`).querySelector(`#save`).setAttribute(`onclick`,`saveRelations('${relationType}')`)
 }
-function editDescendant(){
-	console.log(`test`)
+function removeRelation(relationType,relationToRemove){
+	tempRelations=tempRelations.filter(id=>id!==relationToRemove)
+	editRelations(relationType)
+}
+function addRelation(relationType,relationToAdd){
+	tempRelations.push(relationToAdd)
+	editRelations(relationType)
+}
+function saveRelations(relationType){
+	processRelations(relationType,persons[selectedPersonId].relations[relationType],tempRelations)
+	persons[selectedPersonId].relations[relationType]=tempRelations
+	closeModal()
+	renderPerson()
+	tempRelationsInitialised=0
 }
 function editTimeline(){
 	console.log(`test`)
@@ -84,6 +118,19 @@ let descendantDisplayOrder=[
 	`children`,
 	//`grandchildren`,
 ]
+function processRelations(relationType,realRelations,tempRelations){
+	let linkedRelationType=relationLinks[relationType]
+	for(let personId of realRelations){
+		if(!tempRelations.includes(personId)){
+			persons[personId].relations[linkedRelationType]=persons[personId].relations[linkedRelationType].filter(id=>id!==selectedPersonId)
+		}
+	}
+	for(let personId of tempRelations){
+		if(!realRelations.includes(personId)){
+			persons[personId].relations[linkedRelationType].push(selectedPersonId)
+		}
+	}
+}
 function processPersons(){
 	let actionCounter=0
 	//	relations
@@ -116,6 +163,7 @@ function processPersons(){
 	}
 }
 function selectPerson(id){
+	tempRelationsInitialised=0
 	if(id>persons.length-1||typeof id===`undefined`)return console.warn(`Rejected selection of ID: ${id}. No person of ID: ${id} exists.`) // check if provided ID exists within database before changing selection
 	selectedPersonId=id
 	console.info(`Allowed selection of ID: ${selectedPersonId}\n`,persons[selectedPersonId])
@@ -136,6 +184,7 @@ function renderPerson(){
 	document.getElementById(`Ancestral`).querySelector(`.content`).innerHTML=ancestralDisplayOrder.map(
 		relationType=>!personRelations?.[relationType]?.length?``:`
 			<div id="${relationType}">
+				<div class="edit button ${editMode?``:`hidden`}" onclick="showModal();editRelations('${relationType}')"></div>
 				<div><strong>${capitaliseFirstLetter(relationType)}</strong></div>
 				${personRelations[relationType].sort().map(renderRelationEntry).join(``)}
 			</div>`
@@ -143,6 +192,7 @@ function renderPerson(){
 	document.getElementById(`Descendant`).querySelector(`.content`).innerHTML=descendantDisplayOrder.map(
 		relationType=>!personRelations?.[relationType]?.length?``:`
 			<div id="${relationType}">
+				<div class="edit button ${editMode?``:`hidden`}" onclick="showModal();editRelations('${relationType}')"></div>
 				<div><strong>${capitaliseFirstLetter(relationType)}</strong></div>
 				${personRelations[relationType].sort().map(renderRelationEntry).join(``)}
 			</div>`
@@ -239,4 +289,5 @@ let monthNames=[
 //	initialisation
 let initTime=new Date
 let selectedPersonId=0
+let editMode=0
 createPerson()

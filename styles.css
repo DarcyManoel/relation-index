@@ -1,3 +1,7 @@
+:root{
+	--red:#f44336;
+	--green:#04aa6d;
+}
 *{
 	box-sizing:border-box;
 	outline:none;
@@ -15,14 +19,42 @@ body{
 	>#modal{
 		>#frame{
 			>#content{
+				>div{
+					>#current-relations,
+					>#prospective-relations{
+						flex:1;
+						font-size:.8em;
+						height:8em;
+						overflow-y:scroll;
+					}
+					>#current-relations:before,
+					>#prospective-relations:before{
+						background-color:white;
+						border-bottom:1px solid black;
+						display:block;
+						font-family:UbuntuSansBold;
+						font-size:1.2em;
+						margin-bottom:.25rem;
+						position:sticky;
+						top:0;
+						z-index:1;
+					}
+					>#current-relations:before{
+						content:'Parents';
+					}
+					>#prospective-relations:before{
+						content:'Available';
+					}
+					border-bottom:1px solid black;
+				}
 				>input{
 					border-radius:1rem;
 					border:1px solid black;
 					padding:0 1rem;
-					margin:.5em 0;
 					font-size:1em;
 					width:30ch;
 				}
+				margin:.5em 0;
 			}
 			>#description{
 				font-size:.75em;
@@ -38,10 +70,10 @@ body{
 					border-color:transparent;
 				}
 				>#cancel:hover{
-					background-color:#f44336;
+					background-color:var(--red);
 				}
 				>#save:hover{
-					background-color:#04aa6d;
+					background-color:var(--green);
 				}
 				display:flex;
 				gap:.5rem;
@@ -218,8 +250,8 @@ div[onclick]:hover,
 div:has(.edit){
 	>.edit{
 		position:absolute;
-		top:.5rem;
-		right:.5rem;
+		top:-.2rem;
+		right:0;
 		font-size:initial;
 	}
 	>.edit:before{
@@ -253,9 +285,61 @@ subtle{
 .hidden:before{
 	content:''!important;
 }
+.hover-green{
+	position:relative;
+}
+.hover-green:hover,
+.hovered-green{
+	color:var(--green)!important;
+}
+.hover-green:hover:before,
+.hover-green:hover:after,
+.hover-red:hover:before,
+.hover-red:hover:after{
+	animation:swing .25s linear alternate infinite;
+	background-color:var(--green);
+	border-radius:.12em;
+	content:'';
+	height:.12em;
+	left:.18em;
+	position:absolute;
+	top:50%;
+	translate:0 -50%;
+	width:.9em;
+}
+.hover-green:hover:after{
+	rotate:90deg;
+}
 .hover-move{
 	padding-left:1rem;
+	padding-right:1rem;
 }
-.hover-move:hover{
+.hover-move:hover,
+.hovered-move{
 	padding-left:1.5rem;
+	padding-right:.5rem;
+}
+.hover-red{
+	position:relative;
+}
+.hover-red:hover{
+	color:var(--red)!important;
+}
+.hover-red:hover:before,
+.hover-red:hover:after{
+	background-color:var(--red);
+	left:.15em;
+	rotate:45deg;
+	width:1em;
+}
+.hover-red:hover:after{
+	rotate:135deg;
+}
+@keyframes swing{
+	0%{
+		transform:rotate(8deg);
+	}
+	100%{
+		transform:rotate(-8deg);
+	}
 }
