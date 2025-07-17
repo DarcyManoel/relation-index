@@ -73,7 +73,11 @@ function saveRelations(){
 	for(let relationType of relationTypesAvailable){ // for each editable relation type, synchronise both ends of the relation
 		if(!tempRelations[relationType]?.length&&!persons[selectedPersonId].relations[relationType]?.length)continue
 		processRelations(relationType) // update other persons relations to reflect changes made
-		persons[selectedPersonId].relations[relationType]=tempRelations[relationType] // overwrite selected persons relations to reflect changes made
+		if(tempRelations[relationType].length){
+			persons[selectedPersonId].relations[relationType]=tempRelations[relationType] // overwrite selected persons relations to reflect changes made
+		}else{
+			delete persons[selectedPersonId].relations[relationType]
+		}
 	}
 	closeModal()
 	renderPerson()
