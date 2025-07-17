@@ -18,19 +18,10 @@
 			</div>
 		</div>
 		<!---->
-		<div id="topbar">
+		<div id="top-bar">
 			<div>
 				<div class="button" onclick="importData()">Import</div>
 				<div class="button" onclick="exportData()">Export</div>
-			</div>
-			<div class="button">
-				<label id="editing">
-					<span>Edit Mode</span>
-					<label class="switch">
-						<input type="checkbox" onchange="editMode=this.checked;for(let element of document.getElementsByClassName(`edit`))element.classList.toggle(`hidden`,!editMode)"/>
-						<div class="slider"></div>
-					</label>
-				</label>
 			</div>
 		</div>
 		<div id="banner">
@@ -59,6 +50,18 @@
 					<div class="edit button hidden" style="top:.5rem;right:.5rem;" onclick="showModal()"></div>
 					<div class="content"></div>
 				</div>
+			</div>
+		</div>
+		<div id="bottom-bar">
+			<div id="create-person" class="button" onclick="createPerson()">Create Person</div>
+			<div class="button">
+				<label id="editing">
+					<span>Edit Mode</span>
+					<label class="switch">
+						<input type="checkbox" onchange="editMode=this.checked;for(let element of document.getElementsByClassName(`edit`))element.classList.toggle(`hidden`,!editMode)"/>
+						<div class="slider"></div>
+					</label>
+				</label>
 			</div>
 		</div>
 		<!---->
