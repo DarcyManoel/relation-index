@@ -19,7 +19,12 @@ body{
 	>#modal{
 		>#frame{
 			>#content{
-				>div{
+				>#relation-types{
+					display:flex;
+					gap:.5rem;
+					margin-bottom:.5rem;
+				}
+				>#relation-split{
 					>#current-relations,
 					>#prospective-relations{
 						flex:1;
@@ -40,7 +45,7 @@ body{
 						z-index:1;
 					}
 					>#current-relations:before{
-						content:'Parents';
+						content:attr(title);
 					}
 					>#prospective-relations:before{
 						content:'Available';
@@ -243,9 +248,17 @@ div[onclick]{
 	user-select:none;
 }
 div[onclick]:hover,
-.button:hover{
+.button:hover,
+.button-obvious{
 	background:#eee;
-	border:1px solid #aaa;
+	border:1px solid #aaa!important;
+}
+.button-obvious{
+	color:initial!important;
+	opacity:.5;
+}
+.button-obvious:hover{
+	opacity:1;
 }
 div:has(.edit){
 	>.edit{
