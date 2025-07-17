@@ -127,8 +127,6 @@ function processRelations(relationType){
 	}
 }
 function processPersons(){
-	let actionCounter=0
-	//	relations
 	for(let personId in persons){
 		let personRelations=persons[+personId].relations
 		for(let[relationType,relationIds]of Object.entries(personRelations??{})){ // iterate through relation types
@@ -137,25 +135,11 @@ function processPersons(){
 				if(!(relationRelations[relationLinks[relationType]]??[]).includes(+personId)){ // check for missing direct relation links to establish
 					(relationRelations[relationLinks[relationType]]??[]).push(+personId)
 				}
-				for(let inferralInstructions of inferredRelations[relationType]??[]){ // iterate through inferral possible of relation type
-					for(let inferral of relationRelations[inferralInstructions.via]??[]){
-						personRelations[inferralInstructions.infer]??=[] // create array for relation type of one does not exist
-						if(inferral!==+personId&&!personRelations[inferralInstructions.infer].includes(inferral)){
-							personRelations[inferralInstructions.infer].push(inferral)
-							actionCounter++
-						}
-					}
-				}
 			}
 		}
 	}
-	if(actionCounter>0){ // if actionCounter is above 0, meaning any action has been processed, run this function again to ensure processing coverage
-		processPersons()
-	}
-	else{
-		renderPerson()
-		reportData()
-	}
+	renderPerson()
+	reportData()
 }
 function selectPerson(id){
 	if(id>persons.length-1||typeof id===`undefined`)return console.warn(`Rejected selection of ID: ${id}. No person of ID: ${id} exists.`) // check if provided ID exists within database before changing selection
