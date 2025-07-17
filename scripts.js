@@ -5,10 +5,7 @@ function createPerson(){
 			given:[`Person`],
 			family:[persons.length+1]
 		},
-		relations:{
-			parents:[],
-			children:[]
-		},
+		relations:{},
 	})
 	console.info(`Created new person of ID: ${persons.length-1}\n`,persons[persons.length-1])
 	selectPerson(persons.length-1)
@@ -53,7 +50,7 @@ function editRelations(selectedRelationType=relationTypesAvailable[0]){
 	document.getElementById(`frame`).querySelector(`#content`).innerHTML=`
 		<div id="relation-types">${relationTypesAvailable.map(relationType=>`<div class="button button-obvious" style="${relationType===selectedRelationType?`opacity:1;pointer-events:none;`:``}" onclick="editRelations('${relationType}')">${capitaliseFirstLetter(relationType)}</div>`).join(``)}</div>
 		<div id="relation-split" style="display:flex;gap:.5rem;">
-			<div id="current-relations" title="${capitaliseFirstLetter(selectedRelationType)}">${tempRelations[selectedRelationType].map(relation=>`<div class="hover-move hover-red" onclick="removeRelation('${selectedRelationType}',${relation})">${Object.values(persons[relation].name).map(nameType=>nameType.join(`-`)).join(` `)}</div>`).join(``)}</div>
+			<div id="current-relations" title="${capitaliseFirstLetter(selectedRelationType)}">${(tempRelations[selectedRelationType]??=[]).map(relation=>`<div class="hover-move hover-red" onclick="removeRelation('${selectedRelationType}',${relation})">${Object.values(persons[relation].name).map(nameType=>nameType.join(`-`)).join(` `)}</div>`).join(``)}</div>
 			<div id="prospective-relations">${persons.map(person=>person===persons[selectedPersonId]?``:`<div class="hover-move hover-green ${tempRelations[selectedRelationType].includes(persons.indexOf(person))?`hovered-move hovered-green hover-red" onclick="removeRelation('${selectedRelationType}',${persons.indexOf(person)})"`:`" onclick="addRelation('${selectedRelationType}',${persons.indexOf(person)})"`}">${Object.values(person.name).map(nameType=>nameType.join(`-`)).join(` `)}</div>`).join(``)}</div>
 		</div>`
 	document.getElementById(`frame`).querySelector(`#description`).innerHTML=`
@@ -74,6 +71,7 @@ function addRelation(relationType,relationToAdd){
 }
 function saveRelations(){
 	for(let relationType of relationTypesAvailable){ // for each editable relation type, synchronise both ends of the relation
+		if(!tempRelations[relationType]?.length&&!persons[selectedPersonId].relations[relationType]?.length)continue
 		processRelations(relationType) // update other persons relations to reflect changes made
 		persons[selectedPersonId].relations[relationType]=tempRelations[relationType] // overwrite selected persons relations to reflect changes made
 	}
@@ -117,11 +115,11 @@ let descendantDisplayOrder=[
 ]
 function processRelations(relationType){
 	let linkedRelationType=relationLinks[relationType]
-	for(let personId of persons[selectedPersonId].relations[relationType]){ // remove the selected person from previous linked relations
-		persons[personId].relations[linkedRelationType]=(persons[personId].relations[linkedRelationType]??[]).filter(id=>id!==selectedPersonId)
+	for(let relationId of persons[selectedPersonId].relations[relationType]??[]){ // remove the selected person from previous linked relations
+		persons[relationId].relations[linkedRelationType]=(persons[relationId].relations[linkedRelationType]??[]).filter(id=>id!==selectedPersonId)
 	}
-	for(let personId of tempRelations[relationType]){ // add the selected person to new linked relations
-		(persons[personId].relations[linkedRelationType]??=[]).push(selectedPersonId)
+	for(let relationId of tempRelations[relationType]??[]){ // add the selected person to new linked relations
+		(persons[relationId].relations[linkedRelationType]??=[]).push(selectedPersonId)
 	}
 }
 function processPersons(){
