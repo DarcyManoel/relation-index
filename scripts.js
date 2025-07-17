@@ -204,7 +204,7 @@ function importData(){
 		let reader=new FileReader()
 		reader.onload=()=>{
 			selectedPersonId=0
-			persons=JSON.parse(reader.result)
+			persons=JSON.parse(reader.result).persons
 			console.log(`Imported database:`)
 			processPersons()
 		}
@@ -219,10 +219,10 @@ function importData(){
 }
 function exportData(){
 	let date=new Date().toISOString().split('T')[0]
-	let file=new Blob([JSON.stringify(persons)],{type:`application/json`})
+	let file=new Blob([JSON.stringify({last_edited:date,persons})],{type:`application/json`})
 	let link=document.createElement(`a`)
 	link.href=URL.createObjectURL(file)
-	link.download=`relation-index data (${date}).json`
+	link.download=`relation-index.json`
 	link.click()
 	URL.revokeObjectURL(link.href)
 }
