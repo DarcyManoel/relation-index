@@ -2,6 +2,9 @@
 	--red:#f44336;
 	--green:#04aa6d;
 }
+::-webkit-scrollbar{
+	display:none;
+}
 *{
 	box-sizing:border-box;
 	outline:none;
