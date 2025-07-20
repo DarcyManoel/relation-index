@@ -27,10 +27,8 @@ body{
 				>#relation-split{
 					>#current-relations,
 					>#prospective-relations{
-						flex:1;
 						font-size:.8em;
-						height:8em;
-						overflow-y:scroll;
+						height:12em;
 					}
 					>#current-relations:before,
 					>#prospective-relations:before{
@@ -45,10 +43,61 @@ body{
 						z-index:1;
 					}
 					>#current-relations:before{
-						content:attr(title);
+						content:attr(before);
 					}
 					>#prospective-relations:before{
 						content:'Available';
+					}
+					border-bottom:1px solid black;
+				}
+				>#events-split{
+					>#events,
+					>#event{
+						font-size:.8em;
+						height:12em;
+					}
+					>#event{
+						>div{
+							>*{
+								>input{
+									background:transparent;
+									border:none;
+									padding:0;
+								}
+								border-radius:1em;
+								border:2px inset grey;
+								color:black;
+								cursor:text;
+								margin:0 1rem;
+								padding:0 0 0 1em;
+								width:calc(100% - 2rem);
+							}
+						}
+						>div:before{
+							content:attr(before)':';
+							display:block;
+							font-family:UbuntuSansBold;
+							font-size:.8em;
+							margin:.25rem 0;
+						}
+					}
+					>#events:before,
+					>#event:before{
+						background-color:white;
+						border-bottom:1px solid black;
+						display:block;
+						font-family:UbuntuSansBold;
+						font-size:1.2em;
+						margin-bottom:.25rem;
+						position:sticky;
+						top:0;
+						z-index:1;
+					}
+					>#events:before{
+						content:'Events';
+					}
+					>#event:before{
+						content:attr(before);
 					}
 					border-bottom:1px solid black;
 				}
@@ -248,6 +297,12 @@ details{
 		margin-left:1.5rem;
 	}
 }
+details:has(summary:only-child){
+	>summary{
+		list-style:none;
+	}
+	pointer-events:none;
+}
 div[onclick]{
 	border-radius:.5rem;
 	border:1px solid transparent;
@@ -280,6 +335,10 @@ div:has(.edit){
 		content:'edit';
 	}
 	position:relative;
+}
+input,
+textarea{
+	font-family:UbuntuSans!important;
 }
 strong{
 	font-family:UbuntuSansBold;
@@ -356,6 +415,14 @@ subtle{
 }
 .hover-red:hover:after{
 	rotate:135deg;
+}
+.split-frame{
+	>div{
+		flex:1;
+		overflow-y:scroll;
+	}
+	display:flex;
+	gap:.5rem;
 }
 @keyframes swing{
 	0%{
