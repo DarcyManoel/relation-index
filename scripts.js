@@ -44,14 +44,16 @@ function saveName(input){
 }
 let tempRelations=[]
 let relationTypesAvailable=[]
+let removedRelationsCount
 function editRelations(selectedRelationType=relationTypesAvailable[0]){
+	removedRelationsCount=0
 	document.getElementById(`frame`).querySelector(`#title`).innerHTML=`
 		<div><strong>Editing Relations:</strong></div>`
 	document.getElementById(`frame`).querySelector(`#content`).innerHTML=`
 		<div id="relation-types">${relationTypesAvailable.map(relationType=>`<div class="button button-obvious" style="${relationType===selectedRelationType?`opacity:1;pointer-events:none;`:``}" onclick="editRelations('${relationType}')">${capitaliseFirstLetter(relationType)}</div>`).join(``)}</div>
 		<div id="relation-split" class="split-frame">
-			<div id="current-relations" before="${capitaliseFirstLetter(selectedRelationType)}">${(tempRelations[selectedRelationType]??=[]).map(relation=>`<div class="hover-move hover-red" onclick="removeRelation('${selectedRelationType}',${relation})">${Object.values(persons[relation].name).map(nameType=>nameType.join(`-`)).join(` `)}</div>`).join(``)}</div>
-			<div id="prospective-relations">${persons.map(person=>person===persons[selectedPersonId]?``:`<div class="hover-move hover-green ${tempRelations[selectedRelationType].includes(persons.indexOf(person))?`hovered-move hovered-green hover-red" onclick="removeRelation('${selectedRelationType}',${persons.indexOf(person)})"`:`" onclick="addRelation('${selectedRelationType}',${persons.indexOf(person)})"`}">${Object.values(person.name).map(nameType=>nameType.join(`-`)).join(` `)}</div>`).join(``)}</div>
+			<div id="current-relations" before="${capitaliseFirstLetter(selectedRelationType)}">${(tempRelations[selectedRelationType]??=[]).map(personId=>`<div id="personId${personId}" class="hover-move hover-red" onclick="removeRelation('${selectedRelationType}',${personId})">${Object.values(persons[personId].name).map(nameType=>nameType.join(`-`)).join(` `)}</div>`).join(``)}</div>
+			<div id="prospective-relations">${persons.map((person,personId)=>personId===selectedPersonId?``:`<div id="personId${personId}" class="hover-move hover-green ${tempRelations[selectedRelationType].includes(personId)?`hovered-move hovered-green hover-red" onclick="removeRelation('${selectedRelationType}',${personId})"`:`" onclick="addRelation('${selectedRelationType}',${personId})"`}">${Object.values(person.name).map(nameType=>nameType.join(`-`)).join(` `)}</div>`).join(``)}</div>
 		</div>`
 	document.getElementById(`frame`).querySelector(`#description`).innerHTML=`
 		The left panel displays all current relations of this type.<br>
@@ -61,13 +63,23 @@ function editRelations(selectedRelationType=relationTypesAvailable[0]){
 		Click on a person in the left panel to remove them from the relation.`
 	document.getElementById(`frame`).querySelector(`#actions`).querySelector(`#save`).setAttribute(`onclick`,`saveRelations()`)
 }
-function removeRelation(relationType,relationToRemove){
-	tempRelations[relationType]=tempRelations[relationType].filter(id=>id!==relationToRemove) // remove the argued relation from the temporary relations object
-	editRelations(relationType)
+function removeRelation(relationType,personId){
+	tempRelations[relationType]=tempRelations[relationType].filter(id=>id!==personId) // remove the argued relation from the temporary relations object
+	document.getElementById(`current-relations`).querySelector(`#personId${personId}`).remove() // remove the argued relation from current relations list
+	// remove highlight on argued relation from prospective relations list and flip removeRelation to addRelation
+	let prospectiveRelation=document.getElementById(`prospective-relations`).querySelector(`#personId${personId}`)
+	prospectiveRelation.classList.remove(`hovered-move`,`hovered-green`,`hover-red`)
+	prospectiveRelation.setAttribute(`onclick`,`addRelation('${relationType}',+this.id.slice(-1))`)
+	//
 }
-function addRelation(relationType,relationToAdd){
-	tempRelations[relationType].push(relationToAdd) // add the argued relation to the temporary relations object
-	editRelations(relationType)
+function addRelation(relationType,personId){
+	tempRelations[relationType].push(personId) // add the argued relation to the temporary relations object
+	document.getElementById(`current-relations`).innerHTML=(tempRelations[relationType]??=[]).map(personId=>`<div id="personId${personId}" class="hover-move hover-red" onclick="removeRelation('${relationType}',${personId})">${Object.values(persons[personId].name).map(nameType=>nameType.join(`-`)).join(` `)}</div>`).join(``) // regenerate the current relations list
+	// add highlight to argued relation from prospective relations list and flip addRelation to removeRelation
+	let prospectiveRelation=document.getElementById(`prospective-relations`).querySelector(`#personId${personId}`)
+	prospectiveRelation.classList.add(`hovered-move`,`hovered-green`,`hover-red`)
+	prospectiveRelation.setAttribute(`onclick`,`removeRelation('${relationType}',+this.id.slice(-1))`)
+	//
 }
 function saveRelations(){
 	for(let relationType of relationTypesAvailable){ // for each editable relation type, synchronise both ends of the relation
