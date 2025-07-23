@@ -43,14 +43,11 @@ function saveName(input){
 	renderPerson()
 }
 let tempRelations=[]
-let relationTypesAvailable=[]
-let removedRelationsCount
-function editRelations(selectedRelationType=relationTypesAvailable[0]){
-	removedRelationsCount=0
+function editRelations(selectedRelationType=relationDisplayOrder[0]){
 	document.getElementById(`frame`).querySelector(`#title`).innerHTML=`
 		<div><strong>Editing Relations:</strong></div>`
 	document.getElementById(`frame`).querySelector(`#content`).innerHTML=`
-		<div id="relation-types">${relationTypesAvailable.map(relationType=>`<div class="button button-obvious" style="${relationType===selectedRelationType?`opacity:1;pointer-events:none;`:``}" onclick="editRelations('${relationType}')">${capitaliseFirstLetter(relationType)}</div>`).join(``)}</div>
+		<div id="relation-types">${relationDisplayOrder.map(relationType=>`<div class="button button-obvious" style="${relationType===selectedRelationType?`opacity:1;pointer-events:none;`:``}" onclick="editRelations('${relationType}')">${capitaliseFirstLetter(relationType)}</div>`).join(``)}</div>
 		<div id="relation-split" class="split-frame">
 			<div id="current-relations" before="${capitaliseFirstLetter(selectedRelationType)}">${(tempRelations[selectedRelationType]??=[]).map(personId=>`<div id="personId${personId}" class="hover-move hover-red" onclick="removeRelation('${selectedRelationType}',${personId})">${Object.values(persons[personId].name).map(nameType=>nameType.join(`-`)).join(` `)}</div>`).join(``)}</div>
 			<div id="prospective-relations">${persons.map((person,personId)=>personId===selectedPersonId?``:`<div id="personId${personId}" class="hover-move hover-green ${tempRelations[selectedRelationType].includes(personId)?`hovered-move hovered-green hover-red" onclick="removeRelation('${selectedRelationType}',${personId})"`:`" onclick="addRelation('${selectedRelationType}',${personId})"`}">${Object.values(person.name).map(nameType=>nameType.join(`-`)).join(` `)}</div>`).join(``)}</div>
@@ -82,7 +79,7 @@ function addRelation(relationType,personId){
 	//
 }
 function saveRelations(){
-	for(let relationType of relationTypesAvailable){ // for each editable relation type, synchronise both ends of the relation
+	for(let relationType of relationDisplayOrder){ // for each editable relation type, synchronise both ends of the relation
 		if(!tempRelations[relationType]?.length&&!persons[selectedPersonId].relations[relationType]?.length)continue
 		processRelations(relationType) // update other persons relations to reflect changes made
 		if(tempRelations[relationType].length){
@@ -163,12 +160,10 @@ let inferredRelations={
 		// },
 	]
 }
-let ancestralDisplayOrder=[
+let relationDisplayOrder=[
 	//`grandparents`,
 	`parents`,
 	`siblings`,
-]
-let descendantDisplayOrder=[
 	`children`,
 	//`grandchildren`,
 ]
@@ -214,16 +209,9 @@ function renderPerson(){
 		${!eventDates[`death`]?`<br>`:`<strong>Died </strong>${yearsSince(eventDates[`death`])?Math.round(yearsSince(eventDates[`death`])):`???`} years ago. <subtle>${Math.floor(yearsSince(eventDates[`birth`])-yearsSince(eventDates[`death`]))} years old</subtle>`}`
 	//	relations
 	let personRelations=persons[selectedPersonId].relations??{}
-	document.getElementById(`Ancestral`).querySelector(`.content`).innerHTML=ancestralDisplayOrder.map(
+	document.getElementById(`Relations`).querySelector(`.content`).innerHTML=relationDisplayOrder.map(
 		relationType=>!personRelations?.[relationType]?.length?``:`
-			<div id="${relationType}">
-				<div><strong>${capitaliseFirstLetter(relationType)}</strong></div>
-				${personRelations[relationType].sort().map(renderRelationEntry).join(``)}
-			</div>`
-		).join(``)
-	document.getElementById(`Descendant`).querySelector(`.content`).innerHTML=descendantDisplayOrder.map(
-		relationType=>!personRelations?.[relationType]?.length?``:`
-			<div id="${relationType}">
+			<div id="${relationType}" class="relation-type">
 				<div><strong>${capitaliseFirstLetter(relationType)}</strong></div>
 				${personRelations[relationType].sort().map(renderRelationEntry).join(``)}
 			</div>`

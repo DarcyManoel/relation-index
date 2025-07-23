@@ -249,6 +249,11 @@ body{
 	>#content{
 		>.content-column{
 			>div{
+				>.content{
+					>.relation-type:not(:first-child){
+						margin-top:.5rem;
+					}
+				}
 				>.content:empty:before{
 					content:'There are no records.';
 					display:block;
@@ -269,10 +274,6 @@ body{
 			}
 			>div:empty{
 				padding-bottom:2rem;
-			}
-			>#ancestral:before,
-			>#descendant:before{
-				content:attr(id)' Family';
 			}
 			flex:1;
 		}
