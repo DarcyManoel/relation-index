@@ -27,39 +27,12 @@ body{
 					gap:.5rem;
 					margin-bottom:.5rem;
 				}
-				>#relation-split{
-					>#current-relations,
-					>#prospective-relations{
+				>.split-frame{
+					>div{
 						font-size:.8em;
 						height:12em;
 					}
-					>#current-relations:before,
-					>#prospective-relations:before{
-						background-color:white;
-						border-bottom:1px solid black;
-						display:block;
-						font-family:UbuntuSansBold;
-						font-size:1.2em;
-						margin-bottom:.25rem;
-						position:sticky;
-						top:0;
-						z-index:1;
-					}
-					>#current-relations:before{
-						content:attr(before);
-					}
-					>#prospective-relations:before{
-						content:'Available';
-					}
-					border-bottom:1px solid black;
-				}
-				>#events-split{
-					>#events,
-					>#event{
-						font-size:.8em;
-						height:12em;
-					}
-					>#event{
+					>div:last-child{
 						>div{
 							>*{
 								>input{
@@ -76,18 +49,11 @@ body{
 								width:calc(100% - 2rem);
 							}
 						}
-						>div:before{
-							content:attr(before)':';
-							display:block;
-							font-family:UbuntuSansBold;
-							font-size:.8em;
-							margin:.25rem 0;
-						}
 					}
-					>#events:before,
-					>#event:before{
+					>div:before{
 						background-color:white;
 						border-bottom:1px solid black;
+						content:attr(before);
 						display:block;
 						font-family:UbuntuSansBold;
 						font-size:1.2em;
@@ -96,11 +62,14 @@ body{
 						top:0;
 						z-index:1;
 					}
-					>#events:before{
-						content:'Events';
-					}
-					>#event:before{
-						content:attr(before);
+					>#event{
+						>div:before{
+							content:attr(before)':';
+							display:block;
+							font-family:UbuntuSansBold;
+							font-size:.8em;
+							margin:.25rem 0;
+						}
 					}
 					border-bottom:1px solid black;
 				}

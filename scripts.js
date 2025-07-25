@@ -50,7 +50,7 @@ function editRelations(selectedRelationType=relationDisplayOrder[0]){
 		<div id="relation-types">${relationDisplayOrder.map(relationType=>`<div class="button button-obvious" style="${relationType===selectedRelationType?`opacity:1;pointer-events:none;`:``}" onclick="editRelations('${relationType}')">${capitaliseFirstLetter(relationType)}</div>`).join(``)}</div>
 		<div id="relation-split" class="split-frame">
 			<div id="current-relations" before="${capitaliseFirstLetter(selectedRelationType)}">${(tempRelations[selectedRelationType]??=[]).map(personId=>`<div id="personId${personId}" class="hover-move hover-red" onclick="removeRelation('${selectedRelationType}',${personId})">${Object.values(persons[personId].name).map(nameType=>nameType.join(`-`)).join(` `)}</div>`).join(``)}</div>
-			<div id="prospective-relations">${persons.map((person,personId)=>personId===selectedPersonId?``:`<div id="personId${personId}" class="hover-move hover-green ${tempRelations[selectedRelationType].includes(personId)?`hovered-move hovered-green hover-red" onclick="removeRelation('${selectedRelationType}',${personId})"`:`" onclick="addRelation('${selectedRelationType}',${personId})"`}">${Object.values(person.name).map(nameType=>nameType.join(`-`)).join(` `)}</div>`).join(``)}</div>
+			<div id="prospective-relations" before="Available">${persons.map((person,personId)=>personId===selectedPersonId?``:`<div id="personId${personId}" class="hover-move hover-green ${tempRelations[selectedRelationType].includes(personId)?`hovered-move hovered-green hover-red" onclick="removeRelation('${selectedRelationType}',${personId})"`:`" onclick="addRelation('${selectedRelationType}',${personId})"`}">${Object.values(person.name).map(nameType=>nameType.join(`-`)).join(` `)}</div>`).join(``)}</div>
 		</div>`
 	document.getElementById(`frame`).querySelector(`#description`).innerHTML=`
 		The left panel displays all current relations of this type.<br>
@@ -96,7 +96,7 @@ function editTimeline(){
 		<div><strong>Editing Timeline:</strong></div>`
 	document.getElementById(`frame`).querySelector(`#content`).innerHTML=`
 		<div id="events-split" class="split-frame">
-			<div id="events"></div>
+			<div id="events" before="Events"></div>
 			<div id="event" before="No Event"></div
 		</div>`
 	document.getElementById(`frame`).querySelector(`#description`).innerHTML=`
@@ -109,18 +109,17 @@ function editTimeline(){
 	document.getElementById(`frame`).querySelector(`#actions`).querySelector(`#save`).setAttribute(`onclick`,`saveTimeline()`)
 	renderEvents()
 }
+function renderEvents(){
+	document.getElementById(`events`).innerHTML=`${tempTimeline.map((event,index)=>`<div class="hover-move" onclick="editEvent(this.innerHTML,${index})">${capitaliseFirstLetter(event.event)} ${event?.date?.year?`(${event.date.year})`:``}</div>`).join(``)}<div class="button" onclick="createTimelineEvent()">Create Event</div>`
+}
 function createTimelineEvent(){
 	tempTimeline.push({
-		date:{},
 		event:`event ${tempTimeline.length+1}`
 	})
 	renderEvents()
 }
-function renderEvents(){
-	document.getElementById(`events`).innerHTML=`${tempTimeline.map((event,index)=>`<div class="hover-move" onclick="editEvent(this.innerHTML,${index})">${capitaliseFirstLetter(event.event)} ${event?.date?.year?`(${event.date.year})`:``}</div>`).join(``)}<div class="button" onclick="createTimelineEvent()">Create Event</div>`
-}
 function editEvent(eventName,eventIndex){
-	let{day,month,year}=tempTimeline[eventIndex]?.date
+	let{day,month,year}=tempTimeline[eventIndex]?.date??{}
 	document.getElementById(`event`).setAttribute(`before`,eventName)
 	document.getElementById(`event`).innerHTML=`
 		<div before="Event Name"><input placeholder="event name" value="${tempTimeline[eventIndex]?.event}" onkeyup="if(this.value.trim()){tempTimeline[${eventIndex}].event=this.value}else{tempTimeline.splice(${eventIndex},1)};renderEvents()"></div>
@@ -130,7 +129,7 @@ function editEvent(eventName,eventIndex){
 			<input required placeholder="yyyy" maxlength="4" style="flex:7;" size="7" value="${year?`${year}`.padStart(2,`0`):``}" onkeyup="if(+this.value){tempTimeline[${eventIndex}].date.year=+this.value}else{delete tempTimeline[${eventIndex}].date.year};renderEvents()">
 		</label></div>
 		<div before="Location"><input placeholder="location" value="${tempTimeline[eventIndex]?.location??``}" onkeyup="tempTimeline[${eventIndex}].location=this.value"></div>
-		<div before="Notes"><textarea id="notes" placeholder="notes" value="${tempTimeline[eventIndex]?.notes??``}" onkeyup="tempTimeline[${eventIndex}].notes=this.value"></textarea></div>`
+		<div before="Notes"><textarea id="notes" placeholder="notes" onkeyup="tempTimeline[${eventIndex}].notes=this.value">${tempTimeline[eventIndex]?.notes??``}</textarea></div>`
 }
 function saveTimeline(){
 	persons[selectedPersonId].timeline=tempTimeline
