@@ -109,8 +109,9 @@ function editTimeline(){
 	document.getElementById(`frame`).querySelector(`#actions`).querySelector(`#save`).setAttribute(`onclick`,`saveTimeline()`)
 	renderEvents()
 }
+let selectedEventIndex
 function renderEvents(){
-	document.getElementById(`events`).innerHTML=`${tempTimeline.map((event,index)=>`<div class="hover-move" onclick="editEvent(this.innerHTML,${index})">${capitaliseFirstLetter(event.event)} ${event?.date?.year?`(${event.date.year})`:``}</div>`).join(``)}<div class="button" onclick="createTimelineEvent()">Create Event</div>`
+	document.getElementById(`events`).innerHTML=`${tempTimeline.map((event,index)=>`<div><div class="hover-move ${index!==selectedEventIndex?``:`hovered-move`}" onclick="editEvent(\`${event.event}\`,${index});selectedEventIndex=${index};renderEvents()">${capitaliseFirstLetter(event.event)} ${event?.date?.year?`(${event.date.year})`:``}</div><div class="delete" onclick="selectedEventIndex=null;tempTimeline.splice(${index},1);renderEvents();editEvent()">delete</div></div>`).join(``)}<div class="button" onclick="createTimelineEvent()">Create Event</div>`
 }
 function createTimelineEvent(){
 	tempTimeline.push({
@@ -118,11 +119,16 @@ function createTimelineEvent(){
 	})
 	renderEvents()
 }
-function editEvent(eventName,eventIndex){
+function editEvent(eventTitle,eventIndex){
+	if(!eventTitle||eventTitle!==tempTimeline[eventIndex]?.event){
+		document.getElementById(`event`).setAttribute(`before`,`No Event`)
+		document.getElementById(`event`).innerHTML=``
+		return
+	}
 	let{day,month,year}=tempTimeline[eventIndex]?.date??{}
-	document.getElementById(`event`).setAttribute(`before`,eventName)
+	document.getElementById(`event`).setAttribute(`before`,capitaliseFirstLetter(tempTimeline[eventIndex].event))
 	document.getElementById(`event`).innerHTML=`
-		<div before="Event Name"><input placeholder="event name" value="${tempTimeline[eventIndex]?.event}" onkeyup="if(this.value.trim()){tempTimeline[${eventIndex}].event=this.value}else{tempTimeline.splice(${eventIndex},1)};renderEvents()"></div>
+		<div before="Event Name"><input placeholder="event name" value="${tempTimeline[eventIndex].event}" onkeyup="if(this.value.trim()){tempTimeline[${eventIndex}].event=this.value}"></div>
 		<div before="Date"><label for="day" style="display:flex;">
 			<input id="day" placeholder="dd" maxlength="2" style="flex:4;" size="4" value="${day?`${day}`.padStart(2,`0`):``}" onkeyup="if(+this.value){tempTimeline[${eventIndex}].date.day=+this.value}else{delete tempTimeline[${eventIndex}].date.day}">
 			<input placeholder="mm" maxlength="2" style="flex:5;" size="5" value="${month?`${month}`.padStart(2,`0`):``}" onkeyup="if(+this.value){tempTimeline[${eventIndex}].date.month=+this.value}else{delete tempTimeline[${eventIndex}].date.month}">
@@ -193,6 +199,7 @@ function processPersons(){
 function selectPerson(id){
 	if(id>persons.length-1||typeof id===`undefined`)return console.warn(`Rejected selection of ID: ${id}. No person of ID: ${id} exists.`) // check if provided ID exists within database before changing selection
 	selectedPersonId=id
+	selectedEventIndex=null
 	console.info(`Allowed selection of ID: ${selectedPersonId}\n`,persons[selectedPersonId])
 	renderPerson()
 }

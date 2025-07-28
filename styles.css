@@ -32,7 +32,49 @@ body{
 						font-size:.8em;
 						height:12em;
 					}
-					>div:last-child{
+					>div:before{
+						background-color:white;
+						border-bottom:1px solid black;
+						content:attr(before);
+						display:block;
+						font-family:UbuntuSansBold;
+						font-size:1.2em;
+						margin-bottom:.25rem;
+						position:sticky;
+						top:0;
+						z-index:1;
+					}
+					>#events{
+						>div{
+							>.delete{
+								border:none!important;
+								color:var(--red);
+								opacity:0;
+								position:absolute;
+								right:.5rem;
+								top:0;
+							}
+							>.delete:hover{
+								background:none;
+								border:none!important;
+							}
+							position:relative;
+						}
+						>div:hover{
+							>.delete{
+								opacity:1;
+							}
+						}
+						>div:has(>.delete:hover){
+							>.hover-move{
+								background:#eee;
+								border:1px solid var(--red)!important;
+								color:var(--red);
+							}
+						}
+					}
+					>#prospective-relations,
+					>#event{
 						>div{
 							>*{
 								>input{
@@ -49,18 +91,6 @@ body{
 								width:calc(100% - 2rem);
 							}
 						}
-					}
-					>div:before{
-						background-color:white;
-						border-bottom:1px solid black;
-						content:attr(before);
-						display:block;
-						font-family:UbuntuSansBold;
-						font-size:1.2em;
-						margin-bottom:.25rem;
-						position:sticky;
-						top:0;
-						z-index:1;
 					}
 					>#event{
 						>div:before{
@@ -368,10 +398,13 @@ subtle{
 	padding-left:1rem;
 	padding-right:1rem;
 }
-.hover-move:hover,
-.hovered-move{
+.hover-move:hover{
 	padding-left:1.5rem;
 	padding-right:.5rem;
+}
+.hovered-move{
+	animation:move-right .25s forwards;
+	font-family:UbuntuSansBold;
 }
 .hover-red{
 	position:relative;
@@ -396,6 +429,16 @@ subtle{
 	}
 	display:flex;
 	gap:.5rem;
+}
+@keyframes move-right{
+	0%{
+		padding-left:1rem;
+		padding-right:1rem;
+	}
+	100%{
+		padding-left:1.5rem;
+		padding-right:.5rem;
+	}
 }
 @keyframes swing{
 	0%{
