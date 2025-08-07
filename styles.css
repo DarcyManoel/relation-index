@@ -44,7 +44,8 @@ body{
 						top:0;
 						z-index:1;
 					}
-					>#events{
+					>#events,
+					>#sources{
 						>div{
 							>.delete{
 								border:none!important;
@@ -74,7 +75,8 @@ body{
 						}
 					}
 					>#prospective-relations,
-					>#event{
+					>#event,
+					>#source{
 						>div{
 							>*{
 								>input{
@@ -92,7 +94,8 @@ body{
 							}
 						}
 					}
-					>#event{
+					>#event,
+					>#source{
 						>div:before{
 							content:attr(before)':';
 							display:block;
