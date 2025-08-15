@@ -9,161 +9,10 @@ function createPerson(){
 	console.info(`Created new person of ID: ${persons.length-1}\n`,persons[persons.length-1])
 	selectPerson(persons.length-1)
 }
-function showModal(triggerElement){
-	document.getElementById(`modal`).classList.remove(`hidden`)
-	tempRelations=JSON.parse(JSON.stringify(persons[selectedPersonId].relations??[])) // deep-copy the selected person's relations to allow safe edits to relations
-	tempTimeline=JSON.parse(JSON.stringify(persons[selectedPersonId].timeline??[])) // deep-copy the selected person's timeline to allow safe edits to timeline
-}
-function closeModal(){
-	document.getElementById(`modal`).classList.add(`hidden`)
-	document.getElementById(`frame`).querySelector(`#title`).innerHTML=``
-	document.getElementById(`frame`).querySelector(`#content`).innerHTML=``
-	document.getElementById(`frame`).querySelector(`#description`).innerHTML=``
-	document.getElementById(`frame`).querySelector(`#actions`).querySelector(`#save`).removeAttribute(`onclick`)
-}
-function editName(){
-	let fullName=Object.values(persons[selectedPersonId].name).map(nameType=>nameType.join(`-`)).join(` `)
-	document.getElementById(`frame`).querySelector(`#title`).innerHTML=`
-		<div><strong>Editing Name:</strong></div>`
-	document.getElementById(`frame`).querySelector(`#content`).innerHTML=`
-		<input id="changeName" type="text" placeholder="${fullName}">`
-	document.getElementById(`frame`).querySelector(`#description`).innerHTML=`
-		Use a space to separate given and family names.<br>
-		Use dashes (-) to separate multiple names of the same type.<br>
-		For example: John-Jo Adams-Huck means given names John and Jo, and family names Adams and Huck.<br>
-		Multiple names per type are optional.`
-	document.getElementById(`frame`).querySelector(`#actions`).querySelector(`#save`).setAttribute(`onclick`,`saveName(document.getElementById('changeName').value)`)
-}
-function saveName(input){
-	if(!input)return
-	let[given,family]=input.trim().split(` `)
-	persons[selectedPersonId].name.given=given.split(`-`)
-	persons[selectedPersonId].name.family=family.split(`-`)
-	closeModal()
-	renderPerson()
-}
-let tempRelations=[]
-function editRelations(selectedRelationType=relationDisplayOrder[0]){
-	document.getElementById(`frame`).querySelector(`#title`).innerHTML=`
-		<div><strong>Editing Relations:</strong></div>`
-	document.getElementById(`frame`).querySelector(`#content`).innerHTML=`
-		<div id="relation-types">${relationDisplayOrder.map(relationType=>`<div class="button button-obvious" style="${relationType===selectedRelationType?`opacity:1;pointer-events:none;`:``}" onclick="editRelations('${relationType}')">${capitaliseFirstLetter(relationType)}</div>`).join(``)}</div>
-		<div id="relation-split" class="split-frame">
-			<div id="current-relations" before="${capitaliseFirstLetter(selectedRelationType)}">${(tempRelations[selectedRelationType]??=[]).map(personId=>`<div id="personId${personId}" class="hover-move hover-red" onclick="removeRelation('${selectedRelationType}',${personId})">${Object.values(persons[personId].name).map(nameType=>nameType.join(`-`)).join(` `)}</div>`).join(``)}</div>
-			<div id="prospective-relations" before="Available">${persons.map((person,personId)=>personId===selectedPersonId?``:`<div id="personId${personId}" class="hover-move hover-green ${tempRelations[selectedRelationType].includes(personId)?`hovered-move hovered-green hover-red" onclick="removeRelation('${selectedRelationType}',${personId})"`:`" onclick="addRelation('${selectedRelationType}',${personId})"`}">${Object.values(person.name).map(nameType=>nameType.join(`-`)).join(` `)}</div>`).join(``)}</div>
-		</div>`
-	document.getElementById(`frame`).querySelector(`#description`).innerHTML=`
-		The left panel displays all current relations of this type.<br>
-		The right panel allows you to search for and add other people from the database.<br>
-		Type a name in the search bar to filter available people.<br>
-		Click on an unselected person in the right panel to add them to the relation.<br>
-		Click on a person in the left panel to remove them from the relation.`
-	document.getElementById(`frame`).querySelector(`#actions`).querySelector(`#save`).setAttribute(`onclick`,`saveRelations()`)
-}
-function removeRelation(relationType,personId){
-	tempRelations[relationType]=tempRelations[relationType].filter(id=>id!==personId) // remove the argued relation from the temporary relations object
-	document.getElementById(`current-relations`).querySelector(`#personId${personId}`).remove() // remove the argued relation from current relations list
-	// remove highlight on argued relation from prospective relations list and flip removeRelation to addRelation
-	let prospectiveRelation=document.getElementById(`prospective-relations`).querySelector(`#personId${personId}`)
-	prospectiveRelation.classList.remove(`hovered-move`,`hovered-green`,`hover-red`)
-	prospectiveRelation.setAttribute(`onclick`,`addRelation('${relationType}',+this.id.slice(-1))`)
-	//
-}
-function addRelation(relationType,personId){
-	tempRelations[relationType].push(personId) // add the argued relation to the temporary relations object
-	document.getElementById(`current-relations`).innerHTML=(tempRelations[relationType]??=[]).map(personId=>`<div id="personId${personId}" class="hover-move hover-red" onclick="removeRelation('${relationType}',${personId})">${Object.values(persons[personId].name).map(nameType=>nameType.join(`-`)).join(` `)}</div>`).join(``) // regenerate the current relations list
-	// add highlight to argued relation from prospective relations list and flip addRelation to removeRelation
-	let prospectiveRelation=document.getElementById(`prospective-relations`).querySelector(`#personId${personId}`)
-	prospectiveRelation.classList.add(`hovered-move`,`hovered-green`,`hover-red`)
-	prospectiveRelation.setAttribute(`onclick`,`removeRelation('${relationType}',+this.id.slice(-1))`)
-	//
-}
-function saveRelations(){
-	for(let relationType of relationDisplayOrder){ // for each editable relation type, synchronise both ends of the relation
-		if(!tempRelations[relationType]?.length&&!persons[selectedPersonId].relations[relationType]?.length)continue
-		processRelations(relationType) // update other persons relations to reflect changes made
-		if(tempRelations[relationType].length){
-			persons[selectedPersonId].relations[relationType]=tempRelations[relationType] // overwrite selected persons relations to reflect changes made
-		}else{
-			delete persons[selectedPersonId].relations[relationType]
-		}
-	}
-	closeModal()
-	renderPerson()
-}
-function editTimeline(){
-	document.getElementById(`frame`).querySelector(`#title`).innerHTML=`
-		<div><strong>Editing Timeline:</strong></div>`
-	document.getElementById(`frame`).querySelector(`#content`).innerHTML=`
-		<div id="events-split" class="split-frame">
-			<div id="events" before="Events"></div>
-			<div id="event" before="No Event"></div
-		</div>`
-	document.getElementById(`frame`).querySelector(`#description`).innerHTML=`
-		The left panel displays the full list of timeline events.<br>
-		Click on an event in the left panel to select and edit it.<br>
-		The right panel shows inputs for the selected event's details.<br>
-		To create a new event, use the 'Create Event' button at the bottom of the timeline list.<br>
-		Changes in the right panel are automatically reflected in the timeline list, but only saved to the person when using the save button.<br>
-		To delete an event, clear the 'Event Name' input.`
-	document.getElementById(`frame`).querySelector(`#actions`).querySelector(`#save`).setAttribute(`onclick`,`saveTimeline()`)
-	renderEvents()
-}
-let selectedEventIndex
-function renderEvents(){
-	document.getElementById(`events`).innerHTML=`${tempTimeline.map((event,index)=>`<div><div class="hover-move ${index!==selectedEventIndex?``:`hovered-move`}" onclick="editEvent(\`${event.event}\`,${index});selectedEventIndex=${index};renderEvents()">${capitaliseFirstLetter(event.event)} ${event?.date?.year?`(${event.date.year})`:``}</div><div class="delete" onclick="selectedEventIndex=null;tempTimeline.splice(${index},1);renderEvents();editEvent()">delete</div></div>`).join(``)}<div class="button" onclick="createTimelineEvent()">Create Event</div>`
-}
-function createTimelineEvent(){
-	tempTimeline.push({
-		event:`event ${tempTimeline.length+1}`
-	})
-	renderEvents()
-}
-function editEvent(eventTitle,eventIndex){
-	if(!eventTitle||eventTitle!==tempTimeline[eventIndex]?.event){
-		document.getElementById(`event`).setAttribute(`before`,`No Event`)
-		document.getElementById(`event`).innerHTML=``
-		return
-	}
-	let{day,month,year}=tempTimeline[eventIndex]?.date??{}
-	document.getElementById(`event`).setAttribute(`before`,capitaliseFirstLetter(tempTimeline[eventIndex].event))
-	document.getElementById(`event`).innerHTML=`
-		<div before="Event Name"><input placeholder="event name" value="${tempTimeline[eventIndex].event}" onkeyup="if(this.value.trim()){tempTimeline[${eventIndex}].event=this.value}"></div>
-		<div before="Date"><label for="day" style="display:flex;">
-			<input id="day" placeholder="dd" maxlength="2" style="flex:4;" size="4" value="${day?`${day}`.padStart(2,`0`):``}" onkeyup="if(+this.value){tempTimeline[${eventIndex}].date.day=+this.value}else{delete tempTimeline[${eventIndex}].date.day}">
-			<input placeholder="mm" maxlength="2" style="flex:5;" size="5" value="${month?`${month}`.padStart(2,`0`):``}" onkeyup="if(+this.value){tempTimeline[${eventIndex}].date.month=+this.value}else{delete tempTimeline[${eventIndex}].date.month}">
-			<input required placeholder="yyyy" maxlength="4" style="flex:7;" size="7" value="${year?`${year}`.padStart(2,`0`):``}" onkeyup="if(+this.value){tempTimeline[${eventIndex}].date.year=+this.value}else{delete tempTimeline[${eventIndex}].date.year};renderEvents()">
-		</label></div>
-		<div before="Location"><input placeholder="location" value="${tempTimeline[eventIndex]?.location??``}" onkeyup="tempTimeline[${eventIndex}].location=this.value"></div>
-		<div before="Notes"><textarea id="notes" placeholder="notes" onkeyup="tempTimeline[${eventIndex}].notes=this.value">${tempTimeline[eventIndex]?.notes??``}</textarea></div>`
-}
-function saveTimeline(){
-	persons[selectedPersonId].timeline=tempTimeline
-	closeModal()
-	renderPerson()
-}
 let relationLinks={
 	children:`parents`,
 	parents:`children`,
 	siblings:`siblings`
-}
-let inferredRelations={
-	parents:[
-		// {
-		// 	infer:`grandparents`,
-		// 	via:`parents`
-		// },
-		{
-			infer:`siblings`,
-			via:`children`
-		}
-	],
-	children:[
-		// {
-		// 	infer:`grandchildren`,
-		// 	via:`children`
-		// },
-	]
 }
 let relationDisplayOrder=[
 	//`grandparents`,
@@ -172,15 +21,6 @@ let relationDisplayOrder=[
 	`children`,
 	//`grandchildren`,
 ]
-function processRelations(relationType){
-	let linkedRelationType=relationLinks[relationType]
-	for(let relationId of persons[selectedPersonId].relations[relationType]??[]){ // remove the selected person from previous linked relations
-		persons[relationId].relations[linkedRelationType]=(persons[relationId].relations[linkedRelationType]??[]).filter(id=>id!==selectedPersonId)
-	}
-	for(let relationId of tempRelations[relationType]??[]){ // add the selected person to new linked relations
-		(persons[relationId].relations[linkedRelationType]??=[]).push(selectedPersonId)
-	}
-}
 function processPersons(){
 	for(let personId in persons){
 		let personRelations=persons[+personId].relations
@@ -215,7 +55,7 @@ function renderPerson(){
 		${!eventDates[`death`]?`<br>`:`<strong>Died </strong>${yearsSince(eventDates[`death`])?Math.round(yearsSince(eventDates[`death`])):`???`} years ago. <subtle>${Math.floor(yearsSince(eventDates[`birth`])-yearsSince(eventDates[`death`]))} years old</subtle>`}`
 	//	relations
 	let personRelations=persons[selectedPersonId].relations??{}
-	document.getElementById(`Relations`).querySelector(`.content`).innerHTML=relationDisplayOrder.map(
+	document.getElementById(`Relations`).innerHTML=relationDisplayOrder.map(
 		relationType=>!personRelations?.[relationType]?.length?``:`
 			<div id="${relationType}" class="relation-type">
 				<div><strong>${capitaliseFirstLetter(relationType)}</strong></div>
@@ -223,7 +63,7 @@ function renderPerson(){
 			</div>`
 		).join(``)
 	//	timeline
-	document.getElementById(`Timeline`).querySelector(`.content`).innerHTML=!personTimeline.length?``:personTimeline.sort((a,b)=>[`year`,`month`,`day`].reduce((r,k)=>r||(a.date?.[k]??0)-(b.date?.[k]??0),0)).map(renderTimelineEntry).join(``)
+	document.getElementById(`Timeline`).innerHTML=!personTimeline.length?``:personTimeline.sort((a,b)=>[`year`,`month`,`day`].reduce((r,k)=>r||(a.date?.[k]??0)-(b.date?.[k]??0),0)).map(renderTimelineEntry).join(``)
 }
 function renderRelationEntry(id){
 	let{name}=persons[id]
@@ -254,7 +94,7 @@ function importData(){
 		let reader=new FileReader()
 		reader.onload=()=>{
 			selectedPersonId=0
-			persons=JSON.parse(reader.result).persons
+			persons=JSON.parse(reader.result)
 			console.log(`Imported database:`)
 			processPersons()
 		}
@@ -269,7 +109,7 @@ function importData(){
 }
 function exportData(){
 	let date=new Date().toISOString().split('T')[0]
-	let file=new Blob([JSON.stringify({last_edited:date,persons})],{type:`application/json`})
+	let file=new Blob([JSON.stringify(persons)],{type:`application/json`})
 	let link=document.createElement(`a`)
 	link.href=URL.createObjectURL(file)
 	link.download=`relation-index.json`
@@ -315,5 +155,4 @@ let monthNames=[
 //	initialisation
 let initTime=new Date
 let selectedPersonId=0
-let editMode=0
 createPerson()

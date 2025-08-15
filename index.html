@@ -5,19 +5,6 @@
 		<title>Relation Index</title>
 	</head>
 	<body spellcheck="false">
-		<!-- modal -->
-		<div id="modal" class="hidden">
-			<div id="frame">
-				<div id="title"></div>
-				<div id="content"></div>
-				<div id="description"></div>
-				<div id="actions">
-					<div id="cancel" class="button" onclick="closeModal()">Cancel</div>
-					<div id="save" class="button">Save</div>
-				</div>
-			</div>
-		</div>
-		<!---->
 		<div id="top-bar">
 			<div>
 				<div class="button" onclick="importData()">Import</div>
@@ -28,39 +15,19 @@
 			<div id="name">
 				<div id="given"></div>
 				<div id="family"></div>
-				<div class="edit button hidden" onclick="showModal();editName()"></div>
 			</div>
 			<div id="state"></div>
 		</div>
 		<div id="content">
 			<div class="content-column">
-				<div id="Relations">
-					<div class="edit button hidden" style="top:.5rem;right:.5rem;" onclick="showModal();editRelations()"></div>
-					<div class="content"></div>
-				</div>
+				<div id="Relations"></div>
 			</div>
 			<div class="content-column">
-				<div id="Timeline">
-					<div class="edit button hidden" style="top:.5rem;right:.5rem;" onclick="showModal();editTimeline()"></div>
-					<div class="content"></div>
-				</div>
+				<div id="Timeline"></div>
 			</div>
 			<div class="content-column">
 			</div>
 		</div>
-		<div id="bottom-bar">
-			<div id="create-person" class="button" onclick="createPerson()">Create Person</div>
-			<div class="button">
-				<label id="editing">
-					<span>Edit Mode</span>
-					<label class="switch">
-						<input type="checkbox" onchange="editMode=this.checked;for(let element of document.getElementsByClassName(`edit`))element.classList.toggle(`hidden`,!editMode)"/>
-						<div class="slider"></div>
-					</label>
-				</label>
-			</div>
-		</div>
-		<!---->
 	</body>
 	<script type="text/javascript"src="scripts.js"></script>
 </html>
