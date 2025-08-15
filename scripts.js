@@ -1,5 +1,4 @@
 let persons=[]
-let sources=[]
 function createPerson(){
 	persons.push({
 		name:{
@@ -14,7 +13,6 @@ function showModal(triggerElement){
 	document.getElementById(`modal`).classList.remove(`hidden`)
 	tempRelations=JSON.parse(JSON.stringify(persons[selectedPersonId].relations??[])) // deep-copy the selected person's relations to allow safe edits to relations
 	tempTimeline=JSON.parse(JSON.stringify(persons[selectedPersonId].timeline??[])) // deep-copy the selected person's timeline to allow safe edits to timeline
-	tempSources=JSON.parse(JSON.stringify(persons[selectedPersonId].sources??[])) // deep-copy the selected person's timeline to allow safe edits to timeline
 }
 function closeModal(){
 	document.getElementById(`modal`).classList.add(`hidden`)
@@ -117,8 +115,7 @@ function renderEvents(){
 }
 function createTimelineEvent(){
 	tempTimeline.push({
-		event:`event ${tempTimeline.length+1}`,
-		date:{}
+		event:`event ${tempTimeline.length+1}`
 	})
 	renderEvents()
 }
@@ -128,7 +125,7 @@ function editEvent(eventTitle,eventIndex){
 		document.getElementById(`event`).innerHTML=``
 		return
 	}
-	let{day,month,year}=tempTimeline[eventIndex]?.date
+	let{day,month,year}=tempTimeline[eventIndex]?.date??{}
 	document.getElementById(`event`).setAttribute(`before`,capitaliseFirstLetter(tempTimeline[eventIndex].event))
 	document.getElementById(`event`).innerHTML=`
 		<div before="Event Name"><input placeholder="event name" value="${tempTimeline[eventIndex].event}" onkeyup="if(this.value.trim()){tempTimeline[${eventIndex}].event=this.value}"></div>
@@ -142,58 +139,6 @@ function editEvent(eventTitle,eventIndex){
 }
 function saveTimeline(){
 	persons[selectedPersonId].timeline=tempTimeline
-	closeModal()
-	renderPerson()
-}
-function editSources(){
-	document.getElementById(`frame`).querySelector(`#title`).innerHTML=`
-		<div><strong>Editing Timeline:</strong></div>`
-	document.getElementById(`frame`).querySelector(`#content`).innerHTML=`
-		<div id="sources-split" class="split-frame">
-			<div id="sources" before="Sources"></div>
-			<div id="source" before="No Source"></div
-		</div>`
-	document.getElementById(`frame`).querySelector(`#description`).innerHTML=`
-		The left panel displays the full list of timeline events.<br>
-		Click on an event in the left panel to select and edit it.<br>
-		The right panel shows inputs for the selected event's details.<br>
-		To create a new event, use the 'Create Event' button at the bottom of the timeline list.<br>
-		Changes in the right panel are automatically reflected in the timeline list, but only saved to the person when using the save button.<br>
-		To delete an event, clear the 'Source Title' input.`
-	document.getElementById(`frame`).querySelector(`#actions`).querySelector(`#save`).setAttribute(`onclick`,`saveSources()`)
-	renderSources()
-}
-let selectedSourceIndex
-function renderSources(){
-	document.getElementById(`sources`).innerHTML=`${tempSources.map((source,index)=>`<div><div class="hover-move ${index!==selectedSourceIndex?``:`hovered-move`}" onclick="editSource(\`${source.title}\`,${index});selectedSourceIndex=${index};renderSources()">${capitaliseFirstLetter(source.title)} ${source?.date?.year?`(${source.date.year})`:``}</div><div class="delete" onclick="selectedSourceIndex=null;tempSources.splice(${index},1);renderSources();editSource()">delete</div></div>`).join(``)}<div class="button" onclick="createSource()">Create Source</div>`
-}
-function createSource(){
-	tempSources.push({
-		title:`source ${tempSources.length+1}`,
-		date:{}
-	})
-	renderSources()
-}
-function editSource(sourceTitle,sourceIndex){
-	if(!sourceTitle||sourceTitle!==tempSources[sourceIndex]?.title){
-		document.getElementById(`source`).setAttribute(`before`,`No Event`)
-		document.getElementById(`source`).innerHTML=``
-		return
-	}
-	let{day,month,year}=tempSources[sourceIndex]?.date
-	document.getElementById(`source`).setAttribute(`before`,capitaliseFirstLetter(tempSources[sourceIndex].title))
-	document.getElementById(`source`).innerHTML=`
-		<div before="Source Title"><input placeholder="source title" value="${tempSources[sourceIndex].title}" onkeyup="if(this.value.trim()){tempSources[${sourceIndex}].title=this.value}"></div>
-		<div before="Date"><label for="day" style="display:flex;">
-			<input id="day" placeholder="dd" maxlength="2" style="flex:4;" size="4" value="${day?`${day}`.padStart(2,`0`):``}" onkeyup="if(+this.value){tempSources[${sourceIndex}].date.day=+this.value}else{delete tempSources[${sourceIndex}].date.day}">
-			<input placeholder="mm" maxlength="2" style="flex:5;" size="5" value="${month?`${month}`.padStart(2,`0`):``}" onkeyup="if(+this.value){tempSources[${sourceIndex}].date.month=+this.value}else{delete tempSources[${sourceIndex}].date.month}">
-			<input required placeholder="yyyy" maxlength="4" style="flex:7;" size="7" value="${year?`${year}`.padStart(2,`0`):``}" onkeyup="if(+this.value){tempSources[${sourceIndex}].date.year=+this.value}else{delete tempSources[${sourceIndex}].date.year};renderSources()">
-		</label></div>
-		<div before="Notes"><textarea id="notes" placeholder="notes" onkeyup="tempSources[${sourceIndex}].notes=this.value">${tempSources[sourceIndex]?.notes??``}</textarea></div>
-		<div before="Link"><input id="link" placeholder="notes" value="${tempSources[sourceIndex]?.link??``}" onkeyup="tempSources[${sourceIndex}].link=this.value"></div>`
-}
-function saveSources(){
-	persons[selectedPersonId].sources=tempSources
 	closeModal()
 	renderPerson()
 }
@@ -279,9 +224,6 @@ function renderPerson(){
 		).join(``)
 	//	timeline
 	document.getElementById(`Timeline`).querySelector(`.content`).innerHTML=!personTimeline.length?``:personTimeline.sort((a,b)=>[`year`,`month`,`day`].reduce((r,k)=>r||(a.date?.[k]??0)-(b.date?.[k]??0),0)).map(renderTimelineEntry).join(``)
-	//	sources
-	let personSources=persons[selectedPersonId].sources??[]
-	document.getElementById(`Sources`).querySelector(`.content`).innerHTML=!personSources.length?``:personSources.sort((a,b)=>[`year`,`month`,`day`].reduce((r,k)=>r||(a.date?.[k]??0)-(b.date?.[k]??0),0)).map(renderSource).join(``)
 }
 function renderRelationEntry(id){
 	let{name}=persons[id]
@@ -300,19 +242,6 @@ function renderTimelineEntry(entry){
 			</details>
 		</div>`
 }
-function renderSource(entry){
-	let{date,title,location,notes,link}=entry
-	return`
-		<div>
-			<details>
-				<summary>${capitaliseFirstLetter(title)} ${date?.year?`(${date.year})`:``}</summary>
-				${date?.year?`<div><strong>Date: </strong>${date.day&&date.month&&date.year?appendOrdinal(date.day):``} ${date.month&&date.year?monthNames[date.month-1]:``} ${date.year}</div>`:``}
-				${location?`<div><strong>Location: </strong>${location}</div>`:``}
-				${notes?`<div><strong>Notes: </strong>${notes}</div>`:``}
-				${link?`<div><strong>Link: </strong><a href="${link}">${link}</a></div>`:``}
-			</details>
-		</div>`
-}
 function reportData(){
 	console.log(`Data report at ${formatMilliseconds(new Date-initTime)}\n`,persons)
 }
@@ -325,9 +254,7 @@ function importData(){
 		let reader=new FileReader()
 		reader.onload=()=>{
 			selectedPersonId=0
-			let data=JSON.parse(reader.result)
-			persons=data.persons??[]
-			sources=data.sources??[]
+			persons=JSON.parse(reader.result).persons
 			console.log(`Imported database:`)
 			processPersons()
 		}
@@ -342,7 +269,7 @@ function importData(){
 }
 function exportData(){
 	let date=new Date().toISOString().split('T')[0]
-	let file=new Blob([JSON.stringify({last_edited:date,persons,sources})],{type:`application/json`})
+	let file=new Blob([JSON.stringify({last_edited:date,persons})],{type:`application/json`})
 	let link=document.createElement(`a`)
 	link.href=URL.createObjectURL(file)
 	link.download=`relation-index.json`
