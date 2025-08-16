@@ -70,7 +70,7 @@ function importData(){
 		let reader=new FileReader()
 		reader.onload=()=>{
 			selectedPersonId=0
-			persons=JSON.parse(reader.result)
+			console.log(persons=JSON.parse(reader.result))
 			renderPerson()
 		}
 		reader.readAsText(e.target.files[0])
