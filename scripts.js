@@ -6,7 +6,6 @@ function createPerson(){
 			family:[persons.length+1]
 		},
 	})
-	console.info(`Created new person of ID: ${persons.length-1}\n`,persons[persons.length-1])
 	selectPerson(persons.length-1)
 }
 let relationLinks={
@@ -15,32 +14,12 @@ let relationLinks={
 	siblings:`siblings`
 }
 let relationDisplayOrder=[
-	//`grandparents`,
 	`parents`,
 	`siblings`,
 	`children`,
-	//`grandchildren`,
 ]
-function processPersons(){
-	for(let personId in persons){
-		let personRelations=persons[+personId].relations
-		for(let[relationType,relationIds]of Object.entries(personRelations??{})){ // iterate through relation types
-			for(let relationId of relationIds){ // iterates through relations of type
-				let relationRelations=persons[relationId].relations
-				if(!(relationRelations[relationLinks[relationType]]??[]).includes(+personId)){ // check for missing direct relation links to establish
-					(relationRelations[relationLinks[relationType]]??[]).push(+personId)
-				}
-			}
-		}
-	}
-	renderPerson()
-	reportData()
-}
 function selectPerson(id){
-	if(id>persons.length-1||typeof id===`undefined`)return console.warn(`Rejected selection of ID: ${id}. No person of ID: ${id} exists.`) // check if provided ID exists within database before changing selection
 	selectedPersonId=id
-	selectedEventIndex=null
-	console.info(`Allowed selection of ID: ${selectedPersonId}\n`,persons[selectedPersonId])
 	renderPerson()
 }
 function renderPerson(){
@@ -82,9 +61,6 @@ function renderTimelineEntry(entry){
 			</details>
 		</div>`
 }
-function reportData(){
-	console.log(`Data report at ${formatMilliseconds(new Date-initTime)}\n`,persons)
-}
 function importData(){
 	let fileInput=document.createElement(`input`)
 	fileInput.type=`file`
@@ -95,8 +71,7 @@ function importData(){
 		reader.onload=()=>{
 			selectedPersonId=0
 			persons=JSON.parse(reader.result)
-			console.log(`Imported database:`)
-			processPersons()
+			renderPerson()
 		}
 		reader.readAsText(e.target.files[0])
 		document.body.removeChild(fileInput)
@@ -125,15 +100,6 @@ function appendOrdinal(int){
 function capitaliseFirstLetter(str){
 	return String(str).charAt(0).toUpperCase()+String(str).slice(1)
 }
-function formatMilliseconds(milliseconds){
-	let pad=number=>String(number).padStart(2,`0`)
-	let totalSeconds=Math.floor(milliseconds/1000)
-	let days=Math.floor(totalSeconds/86400)
-	let hours=Math.floor((totalSeconds%86400)/3600)
-	let minutes=Math.floor((totalSeconds%3600)/60)
-	let seconds=totalSeconds%60
-	return`${days?pad(days)+`d `:``}${days||hours?pad(hours)+`h `:days?`00h `:``}${minutes||hours||days?pad(minutes)+`m `:hours||days?`00m `:``}${pad(seconds)}s`
-}
 function yearsSince(date){
 	if(!date||date.year==null)return
 	return(new Date-new Date(date.year,date?.month??1-1,date?.day??1))/31536e6
@@ -153,6 +119,5 @@ let monthNames=[
 	`December`
 ]
 //	initialisation
-let initTime=new Date
 let selectedPersonId=0
 createPerson()
