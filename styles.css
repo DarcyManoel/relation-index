@@ -104,14 +104,9 @@ div[onclick]{
 	transition:.25s;
 	user-select:none;
 }
-div[onclick]:hover,
-.button:hover{
+div[onclick]:hover{
 	background:#eee;
 	border:1px solid #aaa!important;
-}
-input,
-textarea{
-	font-family:UbuntuSans!important;
 }
 strong{
 	font-family:UbuntuSansBold;
@@ -119,25 +114,6 @@ strong{
 }
 subtle{
 	opacity:.5;
-}
-.button{
-	border-radius:.5rem;
-	border:1px solid transparent;
-	cursor:pointer;
-	font-family:UbuntuSansBold;
-	padding:.2rem.4rem;
-	transition:.25s;
-	user-select:none;
-	*{
-		cursor:pointer;
-	}
-}
-.hidden{
-	opacity:0;
-	pointer-events:none;
-}
-.hidden:before{
-	content:''!important;
 }
 .hover-move{
 	padding-left:1rem;
