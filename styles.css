@@ -19,22 +19,6 @@
 	src:url(fonts/UbuntuSans-SemiBold.ttf);
 }
 body{
-	>#top-bar{
-		>div{
-			display:flex;
-			font-size:1.25em;
-			gap:.5rem;
-		}
-		background:white;
-		border-bottom:.4rem solid #00496f;
-		display:flex;
-		gap:1rem;
-		justify-content:space-between;
-		padding:.5rem;
-		position:sticky;
-		top:0;
-		z-index:1;
-	}
 	>#banner{
 		>div{
 			padding:.25rem 5vw;
