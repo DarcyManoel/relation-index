@@ -46,7 +46,7 @@ function renderPersons(){
 						<details open>
 							<summary>${capitaliseFirstLetter(relationType)}</summary>
 							${relationsOfType.map(relation=>`
-								<a href="#p${relation}" onclick="document.getElementById(\`p${relation}\`).setAttribute(\`open\`,\`\`)">${persons[relation].name.given.join(`-`)} ${person.name.family.join(`-`)}</a>`).join(`<br>`)}
+								<a href="#p${relation}" onclick="document.getElementById(\`p${relation}\`).setAttribute(\`open\`,\`\`)">${persons[relation].name.given.join(`-`)||`Person`} ${person.name.family.join(`-`)||relation}</a>`).join(`<br>`)}
 						</details>`).join(``)}
 			</details>
 			<details open>
