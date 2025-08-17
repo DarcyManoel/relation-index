@@ -1,65 +1,71 @@
 let persons=[]
-function createPerson(){
-	persons.push({
-		name:{
-			given:[`Person`],
-			family:[persons.length+1]
+let personTemplate={
+	name:{
+		alias:[`test`,`darcy`],
+		family:[],
+		given:[]
+	},
+	relations:{
+		parents:[]
+	},
+	events:[
+		{
+			"date": {
+				"day": 22, 
+				"month": 6, 
+				"year": 1933
+			}, 
+			"type": "birth"
 		},
-	})
-	selectPerson(persons.length-1)
+		{
+			"date": {
+				"day": 10, 
+				"month": 9, 
+				"year": 2016
+			}, 
+			"type": "death"
+		}
+	]
 }
-let relationLinks={
-	children:`parents`,
-	parents:`children`,
-	siblings:`siblings`
+function createPerson(){
+	persons.push(JSON.parse(JSON.stringify(personTemplate)))
+	console.log(persons.at(-1))
+	renderPersons()
 }
-let relationDisplayOrder=[
-	`parents`,
-	`siblings`,
-	`children`,
-]
-function selectPerson(id){
-	selectedPersonId=id
-	renderPerson()
-}
-function renderPerson(){
-	//	name
-	document.getElementById(`name`).querySelector(`#given`).innerHTML=persons[selectedPersonId].name?.given.join(`-`)??`-`
-	document.getElementById(`name`).querySelector(`#family`).innerHTML=persons[selectedPersonId].name?.family.join(`-`)??`-`
-	//	state
-	let personTimeline=persons[selectedPersonId].timeline??[]
-	let eventDates=Object.fromEntries(personTimeline.map(entry=>[entry.event,entry.date]))
-	document.getElementById(`state`).innerHTML=`
-		<strong>Born </strong>${!eventDates[`birth`]||!yearsSince(eventDates[`birth`])?`???`:Math.floor(yearsSince(eventDates[`birth`]))} years ago.<br>
-		${!eventDates[`death`]?`<br>`:`<strong>Died </strong>${yearsSince(eventDates[`death`])?Math.round(yearsSince(eventDates[`death`])):`???`} years ago. <subtle>${Math.floor(yearsSince(eventDates[`birth`])-yearsSince(eventDates[`death`]))} years old</subtle>`}`
-	//	relations
-	let personRelations=persons[selectedPersonId].relations??{}
-	document.getElementById(`Relations`).innerHTML=relationDisplayOrder.map(
-		relationType=>!personRelations?.[relationType]?.length?``:`
-			<div id="${relationType}" class="relation-type">
-				<div><strong>${capitaliseFirstLetter(relationType)}</strong></div>
-				${personRelations[relationType].sort().map(renderRelationEntry).join(``)}
-			</div>`
-		).join(``)
-	//	timeline
-	document.getElementById(`Timeline`).innerHTML=!personTimeline.length?``:personTimeline.sort((a,b)=>[`year`,`month`,`day`].reduce((r,k)=>r||(a.date?.[k]??0)-(b.date?.[k]??0),0)).map(renderTimelineEntry).join(``)
-}
-function renderRelationEntry(id){
-	let{name}=persons[id]
-	let fullName=Object.values(name).map(nameType=>nameType.join(`-`)).join(` `)
-	return`<div class="hover-move" onclick="selectPerson(${id})">${fullName}</div>`
-}
-function renderTimelineEntry(entry){
-	let{date,event,location,notes}=entry
-	return`
-		<div>
-			<details>
-				<summary>${capitaliseFirstLetter(event)} ${date?.year?`(${date.year})`:``}</summary>
-				${date?.year?`<div><strong>Date: </strong>${date.day&&date.month&&date.year?appendOrdinal(date.day):``} ${date.month&&date.year?monthNames[date.month-1]:``} ${date.year}</div>`:``}
-				${location?`<div><strong>Location: </strong>${location}</div>`:``}
-				${notes?`<div><strong>Notes: </strong>${notes}</div>`:``}
+function renderPersons(){
+	document.getElementById(`persons`).innerHTML=persons.map((person,id)=>`
+		<details id="p${id}">
+			<summary>
+				<div class="name">${person.name.given.join(`-`)||`Person`} ${person.name.family.join(`-`)||id}${person.name.alias.map(alias=>`<div class="alias" hidden="until-found">'${alias}'</div>`).join(``)}
+				</div>
+			</summary>
+			<details open>
+				<summary locked>Relations</summary>
+				${Object.entries(person.relations).map(([relationType,relationsOfType])=>
+					!relationsOfType.length?``:`
+						<details open>
+							<summary>${capitaliseFirstLetter(relationType)}</summary>
+							${relationsOfType.map(relation=>`
+								<a href="#p${relation}" onclick="document.getElementById(\`p${relation}\`).setAttribute(\`open\`,\`\`)">${persons[relation].name.given.join(`-`)} ${person.name.family.join(`-`)}</a>`).join(`<br>`)}
+						</details>`).join(``)}
 			</details>
-		</div>`
+			<details open>
+				<summary locked>Events</summary>
+				${person.events
+					.sort((a,b)=>
+						a.date.year-b.date.year||
+						a.date.month-b.date.month||
+						a.date.day-b.date.day)
+					.map(event=>`
+					<details open>
+						<summary>${capitaliseFirstLetter(event.type)} (${event.date.year})</summary>
+						${Object.entries(event).map(([key,value])=>key===`type`?``:`
+							<strong>${key}: </strong>${
+								key===`date`?`${appendOrdinal(value.day)} ${monthNames[value.month-1]} ${value.year}`:
+									value}`).join(`<br>`)}
+					</details>`).join(``)}
+			</details>
+		</details>`).join(``)
 }
 function importData(){
 	let fileInput=document.createElement(`input`)
@@ -69,9 +75,8 @@ function importData(){
 	fileInput.onchange=(e)=>{
 		let reader=new FileReader()
 		reader.onload=()=>{
-			selectedPersonId=0
 			console.log(persons=JSON.parse(reader.result))
-			renderPerson()
+			renderPersons()
 		}
 		reader.readAsText(e.target.files[0])
 		document.body.removeChild(fileInput)
@@ -87,7 +92,7 @@ function exportData(){
 	let file=new Blob([JSON.stringify(persons)],{type:`application/json`})
 	let link=document.createElement(`a`)
 	link.href=URL.createObjectURL(file)
-	link.download=`relation-index.json`
+	link.download=`profiles.json`
 	link.click()
 	URL.revokeObjectURL(link.href)
 }
@@ -118,6 +123,3 @@ let monthNames=[
 	`November`,
 	`December`
 ]
-//	initialisation
-let selectedPersonId=0
-createPerson()

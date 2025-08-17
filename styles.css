@@ -1,15 +1,3 @@
-:root{
-	--red:#f44336;
-	--green:#04aa6d;
-}
-::-webkit-scrollbar{
-	display:none;
-}
-*{
-	box-sizing:border-box;
-	outline:none;
-	transition:.25s;
-}
 @font-face{
 	font-family:UbuntuSans;
 	src:url(fonts/UbuntuSans-Regular.ttf);
@@ -18,158 +6,95 @@
 	font-family:UbuntuSansBold;
 	src:url(fonts/UbuntuSans-SemiBold.ttf);
 }
-body{
-	>#top-bar{
-		>div{
-			display:flex;
-			font-size:1.25em;
-			gap:.5rem;
-		}
-		background:white;
-		border-bottom:.4rem solid #00496f;
-		display:flex;
-		gap:1rem;
-		justify-content:space-between;
-		padding:.5rem;
-		position:sticky;
-		top:0;
-		z-index:1;
-	}
-	>#banner{
-		>div{
-			padding:.25rem 5vw;
-		}
-		>#name{
-			>div{
-				display:inline-block;
-			}
-			>#given:empty:before,
-			>#family:empty:before{
-				content:'['attr(id)']';
-			}
-			font-size:2.5em;
-		}
-		background:white;
-		border-bottom:1px solid #aaa;
-		padding:1rem 0;
-	}
-	>#content{
-		>.content-column{
-			>div{
-				>.relation-type:not(:first-child){
-					margin-top:.5rem;
-				}
-				background:white;
-				border-radius:.5rem;
-				border:1px solid #aaa;
-				margin-top:1rem;
-				padding:1.4rem 1rem 2rem;
-				position:relative;
-			}
-			>div:before{
-				content:attr(id);
-				font-family:UbuntuSansBold;
-				font-size:1.2em;
-				position:relative;
-				top:-.6rem;
-			}
-			>div:empty{
-				padding-bottom:2rem;
-			}
-			>div:empty:after{
-				content:'There are no records.';
-				display:block;
-			}
-			flex:1;
-		}
-		display:flex;
-		flex:1;
-		gap:1rem;
-		margin:0 auto 4rem;
-		width:90vw;
-	}
-	background:#eee;
-	display:flex;
-	flex-direction:column;
-	font-family:UbuntuSans;
-	margin:0;
-	height:100vh;
-	overscroll-behavior:none;
+*{
+	border-radius:.5em;
+	outline:none;
+	transition:.25s;
 }
-details{
-	>summary{
-		cursor:pointer;
-		font-family:UbuntuSansBold;
+*[onclick]{
+	cursor:pointer;
+}
+*[onclick]:hover{
+	background:#ddd;
+}
+body{
+	font-family:UbuntuSans;
+	overscroll-behavior:none;
+	>#create-person{
+		display:inline-block;
+		font-size:1.2em;
+		padding:0 .5rem;
 		user-select:none;
 	}
-	>div{
-		margin-left:1.5rem;
+	>#persons{
+		>details{
+			display:block;
+			margin-left:0;
+			>summary{
+				padding:.25em;
+			}
+		}
+		>details[open]{
+			background:#f7f7f7;
+			padding-bottom:.5rem;
+			>summary{
+				padding-top:.5rem;
+			}
+		}
 	}
 }
-details:has(summary:only-child){
-	>summary{
-		list-style:none;
+details{
+	margin-left:1rem;
+	>*{
+		margin-left:2rem;
 	}
+	>summary{
+		cursor:pointer;
+		display:flex;
+		flex-direction:column;
+		font-family:UbuntuSansBold;
+		list-style:none;
+		margin-left:1rem;
+		position:relative;
+		user-select:none;
+		>.name{
+			align-items:baseline;
+			display:flex;
+			>.alias{
+				font-size:.75em;
+				opacity:.66;
+				padding-left:.5em;
+			}
+		}
+	}
+	>summary:before{
+		content:'\00B7';
+		position:absolute;
+		left:-.5em;
+		pointer-events:none;
+	}
+}
+details[open]+details[open]{
+	margin-bottom:.1rem;
+	margin-top:.1rem;
+}
+details[open]>summary:before{
+	content:'';
+}
+details:has(>summary:last-child){
+	opacity:.33;
 	pointer-events:none;
 }
-div[onclick]{
-	border-radius:.5rem;
-	border:1px solid transparent;
-	color:#33f;
-	cursor:pointer;
-	transition:.25s;
-	user-select:none;
+details:has(>summary:hover){
+	background:#eee!important;
+	margin-bottom:.1rem;
 }
-div[onclick]:hover,
-.button:hover{
-	background:#eee;
-	border:1px solid #aaa!important;
+details:not([open]):has(>summary:hover){
 }
-input,
-textarea{
-	font-family:UbuntuSans!important;
+html{
+	scroll-behavior:smooth;
 }
 strong{
 	font-family:UbuntuSansBold;
 	user-select:none;
-}
-subtle{
-	opacity:.5;
-}
-.button{
-	*{
-		cursor:pointer;
-	}
-	border-radius:.5rem;
-	border:1px solid transparent;
-	cursor:pointer;
-	font-family:UbuntuSansBold;
-	padding:.2rem.4rem;
-	transition:.25s;
-	user-select:none;
-}
-.hidden{
-	opacity:0;
-	pointer-events:none;
-}
-.hidden:before{
-	content:''!important;
-}
-.hover-move{
-	padding-left:1rem;
-	padding-right:1rem;
-}
-.hover-move:hover{
-	padding-left:1.5rem;
-	padding-right:.5rem;
-}
-@keyframes move-right{
-	0%{
-		padding-left:1rem;
-		padding-right:1rem;
-	}
-	100%{
-		padding-left:1.5rem;
-		padding-right:.5rem;
-	}
 }
