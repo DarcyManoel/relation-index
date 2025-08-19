@@ -1,65 +1,72 @@
 let persons=[]
-function createPerson(){
-	persons.push({
-		name:{
-			given:[`Person`],
-			family:[persons.length+1]
-		},
-	})
-	selectPerson(persons.length-1)
-}
-let relationLinks={
-	children:`parents`,
-	parents:`children`,
-	siblings:`siblings`
-}
-let relationDisplayOrder=[
-	`parents`,
-	`siblings`,
-	`children`,
-]
-function selectPerson(id){
-	selectedPersonId=id
-	renderPerson()
-}
-function renderPerson(){
-	//	name
-	document.getElementById(`name`).querySelector(`#given`).innerHTML=persons[selectedPersonId].name?.given.join(`-`)??`-`
-	document.getElementById(`name`).querySelector(`#family`).innerHTML=persons[selectedPersonId].name?.family.join(`-`)??`-`
-	//	state
-	let personTimeline=persons[selectedPersonId].timeline??[]
-	let eventDates=Object.fromEntries(personTimeline.map(entry=>[entry.event,entry.date]))
-	document.getElementById(`state`).innerHTML=`
-		<strong>Born </strong>${!eventDates[`birth`]||!yearsSince(eventDates[`birth`])?`???`:Math.floor(yearsSince(eventDates[`birth`]))} years ago.<br>
-		${!eventDates[`death`]?`<br>`:`<strong>Died </strong>${yearsSince(eventDates[`death`])?Math.round(yearsSince(eventDates[`death`])):`???`} years ago. <subtle>${Math.floor(yearsSince(eventDates[`birth`])-yearsSince(eventDates[`death`]))} years old</subtle>`}`
-	//	relations
-	let personRelations=persons[selectedPersonId].relations??{}
-	document.getElementById(`Relations`).innerHTML=relationDisplayOrder.map(
-		relationType=>!personRelations?.[relationType]?.length?``:`
-			<div id="${relationType}" class="relation-type">
-				<div><strong>${capitaliseFirstLetter(relationType)}</strong></div>
-				${personRelations[relationType].sort().map(renderRelationEntry).join(``)}
-			</div>`
-		).join(``)
-	//	timeline
-	document.getElementById(`Timeline`).innerHTML=!personTimeline.length?``:personTimeline.sort((a,b)=>[`year`,`month`,`day`].reduce((r,k)=>r||(a.date?.[k]??0)-(b.date?.[k]??0),0)).map(renderTimelineEntry).join(``)
-}
-function renderRelationEntry(id){
-	let{name}=persons[id]
-	let fullName=Object.values(name).map(nameType=>nameType.join(`-`)).join(` `)
-	return`<div class="hover-move" onclick="selectPerson(${id})">${fullName}</div>`
-}
-function renderTimelineEntry(entry){
-	let{date,event,location,notes}=entry
-	return`
-		<div>
-			<details>
-				<summary>${capitaliseFirstLetter(event)} ${date?.year?`(${date.year})`:``}</summary>
-				${date?.year?`<div><strong>Date: </strong>${date.day&&date.month&&date.year?appendOrdinal(date.day):``} ${date.month&&date.year?monthNames[date.month-1]:``} ${date.year}</div>`:``}
-				${location?`<div><strong>Location: </strong>${location}</div>`:``}
-				${notes?`<div><strong>Notes: </strong>${notes}</div>`:``}
-			</details>
-		</div>`
+function renderPersons(){
+	document.getElementById(`navigation`).innerHTML=`<span onclick="renderPersons()">persons</span>`
+	//	recursive renderer
+	function renderRecursive(key,value){
+		if(Array.isArray(value)){
+			//	arrays
+			if(value.every(v=>typeof v!==`object`)){
+				//	primative arrays
+				if(typeof value[0]===`number`){
+					return`
+						<details>
+							<summary>${capitaliseFirstLetter(key)}</summary>
+							${value.map(value=>`<div><span href="#p${value}" onclick="document.getElementById(\`p${value}\`).setAttribute(\`open\`,\`\`)">${persons[value].name.given.join(`-`)} ${persons[value].name.family.join(`-`)}</span></div>`).join(``)}
+						</details>`
+				}else{
+					return`
+						<details>
+							<summary>${capitaliseFirstLetter(key)}</summary>
+							${value.map(value=>`<div>${value}</div>`).join(``)}
+						</details>`
+				}
+			}else{
+				//	object arrays
+				if(Object.keys(value[0]).includes(`type`)){
+					return`
+						<details>
+							<summary>${capitaliseFirstLetter(key)}</summary>
+							${value
+								.sort((a,b)=>
+									a.date.year-b.date.year||
+									a.date.month-b.date.month||
+									a.date.day-b.date.day)
+								.map(element=>renderRecursive(`${element.type} (${element.date.year})`,element)).join(``)}
+						</details>`
+				}else{
+					return`
+						<details>
+							<summary>${capitaliseFirstLetter(key)}</summary>
+							${value.map((element,index)=>renderRecursive(`${index+1}`,element)).join(``)}
+						</details>`
+				}
+			}
+		}else if(typeof value===`object`&&value!==null){
+			//	objects
+			return`
+				<details>
+					<summary>${capitaliseFirstLetter(key)}</summary>
+					${Object.entries(value)
+						.map(([childKey,childValue])=>renderRecursive(childKey,childValue))
+						.join(``)}
+				</details>`
+		}else{
+			//	primitives
+			if(key===`day`){
+				return`<div><strong>${capitaliseFirstLetter(key)}: </strong>${value}</div>`
+			}if(key===`month`){
+				return`<div><strong>${capitaliseFirstLetter(key)}: </strong>${value} (${monthNames[value-1]})</div>`
+			}else{
+				return`<div><strong>${capitaliseFirstLetter(key)}: </strong>${value}</div>`
+			}
+		}
+	}
+	document.getElementById(`content`).innerHTML=persons.map((person,index)=>`
+		<details id="p${index}">
+			<summary>${person.name.given.join(`-`)} ${person.name.family.join(`-`)}</summary>
+			${Object.entries(person).map(([key,value])=>renderRecursive(key,value)).join(``)}
+		</details>
+	`).join(``)
 }
 function importData(){
 	let fileInput=document.createElement(`input`)
@@ -69,9 +76,8 @@ function importData(){
 	fileInput.onchange=(e)=>{
 		let reader=new FileReader()
 		reader.onload=()=>{
-			selectedPersonId=0
 			console.log(persons=JSON.parse(reader.result))
-			renderPerson()
+			renderPersons()
 		}
 		reader.readAsText(e.target.files[0])
 		document.body.removeChild(fileInput)
@@ -91,6 +97,7 @@ function exportData(){
 	link.click()
 	URL.revokeObjectURL(link.href)
 }
+renderPersons()
 //	tools
 function appendOrdinal(int){
 	return int+((int%100>10&&int%100<14)
@@ -99,10 +106,6 @@ function appendOrdinal(int){
 }
 function capitaliseFirstLetter(str){
 	return String(str).charAt(0).toUpperCase()+String(str).slice(1)
-}
-function yearsSince(date){
-	if(!date||date.year==null)return
-	return(new Date-new Date(date.year,date?.month??1-1,date?.day??1))/31536e6
 }
 let monthNames=[
 	`January`,
@@ -118,6 +121,6 @@ let monthNames=[
 	`November`,
 	`December`
 ]
-//	initialisation
-let selectedPersonId=0
-createPerson()
+
+persons=[{"name":{"given":["Darcy"],"family":["Hamilton","Manoel"]},"events":[{"date":{"day":9,"month":5,"year":2000},"type":"birth","location":"Modbury Public Hospital, Modbury, South Australia"}],"relations":{"parents":[2,3],"siblings":[1]}},{"name":{"given":["Monty"],"family":["Manoel"]},"events":[{"date":{"day":2,"month":5,"year":1999},"type":"birth","location":"Adelaide, South Australia"}],"relations":{"parents":[2,3],"siblings":[0]}},{"name":{"given":["Richard","John"],"family":["Manoel"]},"events":[{"date":{"day":25,"month":6,"year":1967},"type":"birth","location":"North Adelaide, South Australia"}],"relations":{"parents":[4,5],"children":[0,1],"siblings":[6]}},{"name":{"given":["Brandi"],"family":["Hamilton"]},"relations":{"children":[1,0]}},{"name":{"given":["Raymond"],"family":["Manoel"]},"events":[{"date":{"day":22,"month":6,"year":1933},"type":"birth"},{"date":{"day":10,"month":9,"year":2016},"type":"death"}],"relations":{"children":[2,6]}},{"name":{"given":["Gwendoline"],"family":["Lepoidevin"]},"relations":{"children":[2,6]}},{"name":{"given":["Wendy","Joy"],"family":["Manoel"]},"relations":{"parents":[4,5],"siblings":[2]}}]
+renderPersons()
