@@ -45,7 +45,7 @@ function renderPersons(){
 					.map(event=>`
 						<details>
 							<summary>${capitaliseFirstLetter(event.type)} (${event.date.year})</summary>
-							${Object.entries(event).map(([key,value])=>key===`type`?``:`
+							${Object.entries(event).map(([key,value])=>`
 								<strong>${key}: </strong>${key===`date`
 									?`${appendOrdinal(value.day)} ${monthNames[value.month-1]} ${value.year}`
 									:value}
