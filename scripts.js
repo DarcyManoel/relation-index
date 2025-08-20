@@ -1,30 +1,15 @@
 let persons=[]
 let personTemplate={
 	name:{
-		alias:[`test`,`darcy`],
+		alias:[],
 		family:[],
 		given:[]
 	},
 	relations:{
-		parents:[]
+		parents:[],
+		children:[]
 	},
 	events:[
-		{
-			"date": {
-				"day": 22, 
-				"month": 6, 
-				"year": 1933
-			}, 
-			"type": "birth"
-		},
-		{
-			"date": {
-				"day": 10, 
-				"month": 9, 
-				"year": 2016
-			}, 
-			"type": "death"
-		}
 	]
 }
 function createPerson(){
