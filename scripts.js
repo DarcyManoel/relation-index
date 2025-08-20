@@ -39,17 +39,17 @@ function renderPersons(){
 				<div class="name">${person.name.given.join(`-`)||`Person`} ${person.name.family.join(`-`)||id}${person.name.alias.map(alias=>`<div class="alias" hidden="until-found">'${alias}'</div>`).join(``)}
 				</div>
 			</summary>
-			<details open>
+			<details>
 				<summary locked>Relations</summary>
 				${Object.entries(person.relations).map(([relationType,relationsOfType])=>
 					!relationsOfType.length?``:`
-						<details open>
+						<details>
 							<summary>${capitaliseFirstLetter(relationType)}</summary>
 							${relationsOfType.map(relation=>`
 								<a href="#p${relation}" onclick="document.getElementById(\`p${relation}\`).setAttribute(\`open\`,\`\`)">${persons[relation].name.given.join(`-`)||`Person`} ${person.name.family.join(`-`)||relation}</a>`).join(`<br>`)}
 						</details>`).join(``)}
 			</details>
-			<details open>
+			<details>
 				<summary locked>Events</summary>
 				${person.events
 					.sort((a,b)=>
@@ -57,7 +57,7 @@ function renderPersons(){
 						a.date.month-b.date.month||
 						a.date.day-b.date.day)
 					.map(event=>`
-					<details open>
+					<details>
 						<summary>${capitaliseFirstLetter(event.type)} (${event.date.year})</summary>
 						${Object.entries(event).map(([key,value])=>key===`type`?``:`
 							<strong>${key}: </strong>${
