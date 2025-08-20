@@ -30,8 +30,8 @@ function renderPersons(){
 					<details>
 						<summary>${capitaliseFirstLetter(relationType)}</summary>
 						${relationsOfType.map(relation=>`
-							<a href="#p${relation}" onclick="document.getElementById(\`p${relation}\`).setAttribute(\`open\`,\`\`)">${persons[relation].name.given.join(`-`)||`Person`} ${person.name.family.join(`-`)||relation}</a>
-						`).join(`<br>`)}
+							<div href="#p${relation}" onclick="document.getElementById(\`p${relation}\`).setAttribute(\`open\`,\`\`)">${persons[relation].name.given.join(`-`)||`Person`} ${person.name.family.join(`-`)||relation}</div>
+						`).join(``)}
 					</details>
 				`).join(``)}
 			</details>

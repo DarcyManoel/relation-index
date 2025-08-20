@@ -11,11 +11,14 @@
 	outline:none;
 	transition:.25s;
 }
+*[href]{
+	padding:0 .5em;
+}
 *[onclick]{
 	cursor:pointer;
 }
 *[onclick]:hover{
-	background:#ddd;
+	opacity:.5;
 }
 body{
 	font-family:UbuntuSans;
