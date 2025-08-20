@@ -1,72 +1,78 @@
 let persons=[]
 function renderPersons(){
 	document.getElementById(`navigation`).innerHTML=`<span onclick="renderPersons()">persons</span>`
-	//	recursive renderer
-	function renderRecursive(key,value){
-		if(Array.isArray(value)){
-			//	arrays
-			if(value.every(v=>typeof v!==`object`)){
-				//	primative arrays
-				if(typeof value[0]===`number`){
-					return`
+	document.getElementById(`content`).innerHTML=persons.map((person,index)=>{
+		let personEvents=person.events
+		let eventDates=Object.fromEntries(personEvents.map(entry=>[entry.type,entry.date]))
+		console.log(person)
+		return`
+			<details id="p${index}">
+				<summary>${person.name.given.join(`-`)} ${person.name.family.join(`-`)}</summary>
+				<details id="state" class="subtle" open>
+					<summary>State</summary>
+					<strong>Born </strong>${!eventDates[`birth`]||!yearsSince(eventDates[`birth`])?`???`:Math.floor(yearsSince(eventDates[`birth`]))} years ago.<br>
+					${!eventDates[`death`]?``:`<strong>Died </strong>${yearsSince(eventDates[`death`])?Math.round(yearsSince(eventDates[`death`])):`???`} years ago.<subtle> ${Math.floor(yearsSince(eventDates[`birth`])-yearsSince(eventDates[`death`]))} years old</subtle>`}
+				</details>
+				<details id="name">
+					<summary>Name</summary>
+					<details>
+						<summary>Alias</summary>
+						${person.name.alias.map(name=>`
+						<div>${name}</div>
+						`).join(``)}
+					</details>
+					<details>
+						<summary>Given</summary>
+						${person.name.given.map(name=>`
+						<div>${name}</div>
+						`).join(``)}
+					</details>
+					<details>
+						<summary>Family</summary>
+						${person.name.family.map(name=>`
+						<div>${name}</div>
+						`).join(``)}
+					</details>
+				</details>
+				<details id="relations">
+					<summary>Relations</summary>
+					<details>
+						<summary>Parents</summary>
+						${person.relations.parents.map(relation=>`
+						<div href="#p${relation}" onclick="document.getElementById(\`p${relation}\`).setAttribute(\`open\`,\`\`)">${persons[relation].name.given.join(`-`)} ${persons[relation].name.family.join(`-`)}</div>
+						`).join(``)}
+					</details>
+					${Object.entries(person.relations).map(([relationType,relations])=>relationType===`parents`?``:`
+					<details>
+						<summary>${capitaliseFirstLetter(relationType)}</summary>
+						${relations.map(relation=>`
+						<div href="#p${relation}" onclick="document.getElementById(\`p${relation}\`).setAttribute(\`open\`,\`\`)">${persons[relation].name.given.join(`-`)} ${persons[relation].name.family.join(`-`)}</div>
+						`).join(``)}
+					</details>
+					`).join(``)}
+				</details>
+				<details id="events">
+					<summary>Events</summary>
+					${person.events.map(event=>`
+					<details>
+						<summary>${capitaliseFirstLetter(event.type)}</summary>
+						${Object.entries(event).map(([key,value])=>key===`date`?`
 						<details>
-							<summary>${capitaliseFirstLetter(key)}</summary>
-							${value.map(value=>`<div><span href="#p${value}" onclick="document.getElementById(\`p${value}\`).setAttribute(\`open\`,\`\`)">${persons[value].name.given.join(`-`)} ${persons[value].name.family.join(`-`)}</span></div>`).join(``)}
-						</details>`
-				}else{
-					return`
-						<details>
-							<summary>${capitaliseFirstLetter(key)}</summary>
-							${value.map(value=>`<div>${value}</div>`).join(``)}
-						</details>`
-				}
-			}else{
-				//	object arrays
-				if(Object.keys(value[0]).includes(`type`)){
-					return`
-						<details>
-							<summary>${capitaliseFirstLetter(key)}</summary>
-							${value
-								.sort((a,b)=>
-									a.date.year-b.date.year||
-									a.date.month-b.date.month||
-									a.date.day-b.date.day)
-								.map(element=>renderRecursive(`${element.type} (${element.date.year})`,element)).join(``)}
-						</details>`
-				}else{
-					return`
-						<details>
-							<summary>${capitaliseFirstLetter(key)}</summary>
-							${value.map((element,index)=>renderRecursive(`${index+1}`,element)).join(``)}
-						</details>`
-				}
-			}
-		}else if(typeof value===`object`&&value!==null){
-			//	objects
-			return`
-				<details>
-					<summary>${capitaliseFirstLetter(key)}</summary>
-					${Object.entries(value)
-						.map(([childKey,childValue])=>renderRecursive(childKey,childValue))
-						.join(``)}
-				</details>`
-		}else{
-			//	primitives
-			if(key===`day`){
-				return`<div><strong>${capitaliseFirstLetter(key)}: </strong>${value}</div>`
-			}if(key===`month`){
-				return`<div><strong>${capitaliseFirstLetter(key)}: </strong>${value} (${monthNames[value-1]})</div>`
-			}else{
-				return`<div><strong>${capitaliseFirstLetter(key)}: </strong>${value}</div>`
-			}
-		}
-	}
-	document.getElementById(`content`).innerHTML=persons.map((person,index)=>`
-		<details id="p${index}">
-			<summary>${person.name.given.join(`-`)} ${person.name.family.join(`-`)}</summary>
-			${Object.entries(person).map(([key,value])=>renderRecursive(key,value)).join(``)}
-		</details>
-	`).join(``)
+							<summary>${key}</summary>
+							${Object.entries(value).map(([key,value])=>key===`month`?`
+							<div><strong>${key}: </strong>${value} <subtle>(${monthNames[value-1]})</subtle></div>
+							`:`
+							<div><strong>${key}: </strong>${value}</div>
+							`).join(``)}
+						</details>
+						`:`
+						<div><strong>${key}: </strong>${value}</div>
+						`).join(``)}
+					</details>
+					`).join(``)}
+				</details>
+			</details>
+	`}).join(``)
 }
 function importData(){
 	let fileInput=document.createElement(`input`)
@@ -121,6 +127,7 @@ let monthNames=[
 	`November`,
 	`December`
 ]
-
-persons=[{"name":{"given":["Darcy"],"family":["Hamilton","Manoel"]},"events":[{"date":{"day":9,"month":5,"year":2000},"type":"birth","location":"Modbury Public Hospital, Modbury, South Australia"}],"relations":{"parents":[2,3],"siblings":[1]}},{"name":{"given":["Monty"],"family":["Manoel"]},"events":[{"date":{"day":2,"month":5,"year":1999},"type":"birth","location":"Adelaide, South Australia"}],"relations":{"parents":[2,3],"siblings":[0]}},{"name":{"given":["Richard","John"],"family":["Manoel"]},"events":[{"date":{"day":25,"month":6,"year":1967},"type":"birth","location":"North Adelaide, South Australia"}],"relations":{"parents":[4,5],"children":[0,1],"siblings":[6]}},{"name":{"given":["Brandi"],"family":["Hamilton"]},"relations":{"children":[1,0]}},{"name":{"given":["Raymond"],"family":["Manoel"]},"events":[{"date":{"day":22,"month":6,"year":1933},"type":"birth"},{"date":{"day":10,"month":9,"year":2016},"type":"death"}],"relations":{"children":[2,6]}},{"name":{"given":["Gwendoline"],"family":["Lepoidevin"]},"relations":{"children":[2,6]}},{"name":{"given":["Wendy","Joy"],"family":["Manoel"]},"relations":{"parents":[4,5],"siblings":[2]}}]
-renderPersons()
+function yearsSince(date){
+	if(!date||date.year==null)return
+	return(new Date-new Date(date.year,date?.month??1-1,date?.day??1))/31536e6
+}

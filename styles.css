@@ -18,6 +18,9 @@
 	cursor:pointer;
 	user-select:none;
 }
+*[onclick]:hover{
+	opacity:.66;
+}
 body{
 	background:#2e3238;
 	color:white;
@@ -60,10 +63,17 @@ details:not([open]){
 		vertical-align:text-top;
 	}
 }
-span[onclick]:hover{
-	opacity:.66;
+details[open]:has(>summary:last-child):after{
+	content:'No Records.';
+	margin-left:4ch;
 }
 strong{
 	font-family:UbuntuMonoBold;
 	user-select:none;
+}
+subtle,.subtle{
+	opacity:.66;
+}
+subtle{
+	margin:0;
 }
