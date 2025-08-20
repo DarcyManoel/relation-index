@@ -41,13 +41,14 @@ function renderPersons(){
 			</summary>
 			<details>
 				<summary locked>Relations</summary>
-				${Object.entries(person.relations).map(([relationType,relationsOfType])=>
-					!relationsOfType.length?``:`
-						<details>
-							<summary>${capitaliseFirstLetter(relationType)}</summary>
-							${relationsOfType.map(relation=>`
-								<a href="#p${relation}" onclick="document.getElementById(\`p${relation}\`).setAttribute(\`open\`,\`\`)">${persons[relation].name.given.join(`-`)||`Person`} ${person.name.family.join(`-`)||relation}</a>`).join(`<br>`)}
-						</details>`).join(``)}
+				${Object.entries(person.relations).map(([relationType,relationsOfType])=>!relationsOfType.length?``:`
+					<details>
+						<summary>${capitaliseFirstLetter(relationType)}</summary>
+						${relationsOfType.map(relation=>`
+							<a href="#p${relation}" onclick="document.getElementById(\`p${relation}\`).setAttribute(\`open\`,\`\`)">${persons[relation].name.given.join(`-`)||`Person`} ${person.name.family.join(`-`)||relation}</a>
+						`).join(`<br>`)}
+					</details>
+				`).join(``)}
 			</details>
 			<details>
 				<summary locked>Events</summary>
@@ -57,13 +58,14 @@ function renderPersons(){
 						a.date.month-b.date.month||
 						a.date.day-b.date.day)
 					.map(event=>`
-					<details>
-						<summary>${capitaliseFirstLetter(event.type)} (${event.date.year})</summary>
-						${Object.entries(event).map(([key,value])=>key===`type`?``:`
-							<strong>${key}: </strong>${
-								key===`date`?`${appendOrdinal(value.day)} ${monthNames[value.month-1]} ${value.year}`:
-									value}`).join(`<br>`)}
-					</details>`).join(``)}
+						<details>
+							<summary>${capitaliseFirstLetter(event.type)} (${event.date.year})</summary>
+							${Object.entries(event).map(([key,value])=>key===`type`?``:`
+								<strong>${key}: </strong>${key===`date`
+									?`${appendOrdinal(value.day)} ${monthNames[value.month-1]} ${value.year}`
+									:value}
+							`).join(`<br>`)}
+						</details>`).join(``)}
 			</details>
 		</details>`).join(``)
 }
