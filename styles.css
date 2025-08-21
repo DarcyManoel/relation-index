@@ -76,22 +76,6 @@ body{
 		}
 	}
 }
-details{
-	>summary{
-		cursor:pointer;
-		font-family:UbuntuSansBold;
-		user-select:none;
-	}
-	>div{
-		margin-left:1.5rem;
-	}
-}
-details:has(summary:only-child){
-	pointer-events:none;
-	>summary{
-		list-style:none;
-	}
-}
 div[onclick]{
 	border-radius:.5rem;
 	border:1px solid transparent;
