@@ -5,7 +5,7 @@ function createPerson(){
 			given:[`Person`],
 			family:[persons.length+1]
 		},
-		timeline:{
+		lifespan:{
 			birth:null,
 			death:null
 		}
@@ -28,26 +28,23 @@ function selectPerson(id){
 }
 function renderPerson(){
 	let person=persons[selectedPersonId]
-	let{birth,death}=person.timeline
-	//	name
-	document.getElementById(`name`).querySelector(`#given`).innerHTML=persons[selectedPersonId].name?.given.join(`-`)??`-`
-	document.getElementById(`name`).querySelector(`#family`).innerHTML=persons[selectedPersonId].name?.family.join(`-`)??`-`
-	//	state
-	document.getElementById(`state`).innerHTML=`<strong>${birth||``}-${death||``}</strong>`
+	let{birth,death}=person.lifespan
+	//	banner
+	document.getElementById(`banner`).innerHTML=`
+		<div id="name">${persons[selectedPersonId].name.given[0]} ${persons[selectedPersonId].name.family.join(`-`)}</div>
+		<div class="lifespan">${birth||``} - ${death||``}</div>`
 	//	relations
-	let personRelations=persons[selectedPersonId].relations??{}
-	document.getElementById(`Relations`).innerHTML=relationDisplayOrder.map(
-		relationType=>!personRelations?.[relationType]?.length?``:`
-			<div id="${relationType}" class="relation-type">
-				<div><strong>${capitaliseFirstLetter(relationType)}</strong></div>
-				${personRelations[relationType].sort().map(renderRelationEntry).join(``)}
-			</div>`
-		).join(``)
-}
-function renderRelationEntry(id){
-	let{name}=persons[id]
-	let fullName=Object.values(name).map(nameType=>nameType.join(`-`)).join(` `)
-	return`<div class="hover-move" onclick="selectPerson(${id})">${fullName}</div>`
+	let relations=person.relations
+	document.getElementById(`relations`).innerHTML=relationDisplayOrder.map(
+		relationType=>!relations?.[relationType]?.length?``:`
+			<details open id="${relationType}">
+				<summary>${capitaliseFirstLetter(relationType)}</summary>
+				${relations[relationType].map(relation=>`
+				<div onclick="selectPerson(${relation})">
+					${Object.values(persons[relation].name).map(nameType=>nameType.join(`-`)).join(` `)}<br>
+					<div class="lifespan">${persons[relation].lifespan.birth||``} - ${persons[relation].lifespan.death||``}</div>
+				</div>`).join(``)}
+			</details>`).join(``)
 }
 function importData(){
 	let fileInput=document.createElement(`input`)
