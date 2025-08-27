@@ -37,8 +37,14 @@ body{
 				padding:0 1.25rem;
 				user-select:none;
 			}
-			>div[onclick]{
+			>div{
+				color:#f33;
 				padding:.1rem 2.5rem;
+			}
+			div[onclick]{
+				color:#33f;
+				cursor:pointer;
+				user-select:none;
 			}
 			>div[onclick]:hover{
 				backdrop-filter:brightness(.9);
@@ -48,12 +54,6 @@ body{
 	>#relations:empty:after{
 		content:'There are no records.';
 	}
-}
-div[onclick]{
-	color:#33f;
-	cursor:pointer;
-	transition:.25s;
-	user-select:none;
 }
 .lifespan{
 	color:initial;

@@ -39,12 +39,24 @@ function renderPerson(){
 		relationType=>!relations?.[relationType]?.length?``:`
 			<details open id="${relationType}">
 				<summary>${capitaliseFirstLetter(relationType)}</summary>
-				${relations[relationType].map(relation=>`
-				<div onclick="selectPerson(${relation})">
-					${Object.values(persons[relation].name).map(nameType=>nameType.join(`-`)).join(` `)}<br>
-					<div class="lifespan">${persons[relation].lifespan.birth||``} - ${persons[relation].lifespan.death||``}</div>
-				</div>`).join(``)}
+				${relations[relationType].map(renderRelation).join(``)}
 			</details>`).join(``)
+}
+function renderRelation(relation){
+	if(typeof relation===`number`){
+		let person=persons[relation]
+		let fullName=Object.values(person.name)
+			.map(nameType=>nameType.join(`-`))
+			.join(` `)
+		let lifespan=`${person.lifespan.birth||``} - ${person.lifespan.death||``}`
+		return`
+			<div onclick="selectPerson(${relation})">
+				${fullName}
+				<div class="lifespan">${lifespan}</div>
+			</div>`
+	}else{
+		return`<div>${relation}</div>`
+	}
 }
 function importData(){
 	let fileInput=document.createElement(`input`)
