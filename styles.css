@@ -53,6 +53,7 @@ body{
 	}
 	>#relations:empty:after{
 		content:'There are no records.';
+		margin-left:1.25rem;
 	}
 }
 .lifespan{
