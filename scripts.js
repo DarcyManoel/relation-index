@@ -39,7 +39,9 @@ function renderPerson(){
 		relationType=>!relations?.[relationType]?.length?``:`
 			<details open id="${relationType}">
 				<summary>${capitaliseFirstLetter(relationType)}</summary>
-				${relations[relationType].map(renderRelation).join(``)}
+				${relations[relationType]
+					.sort((a,b)=>(b%1===0)-(a%1===0))
+					.map(renderRelation).join(``)}
 			</details>`).join(``)
 }
 function renderRelation(relation){
