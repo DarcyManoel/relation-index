@@ -12,14 +12,8 @@ function createPerson(){
 	})
 	selectPerson(persons.length-1)
 }
-let relationLinks={
-	children:`parents`,
-	parents:`children`,
-	siblings:`siblings`
-}
 let relationDisplayOrder=[
 	`parents`,
-	`siblings`,
 	`children`,
 ]
 function selectPerson(id){
