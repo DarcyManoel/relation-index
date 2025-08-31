@@ -46,7 +46,7 @@ function renderBanner(index=selectedPersonId){
 	let{birth,death}=person.lifespan
 	return`
 		<div onclick="selectPerson(${index})">
-			<div>${given[0]} ${family.join(`-`)}</div>
+			<div>${given[0]} ${family.join(`-`)} <span class="inline-container">${(alias||[]).map(a=>`<div hidden="until-found">'${a}'</div>`).join(``)}</span></div>
 			<div class="lifespan">${birth||``} - ${death||``}</div>
 		</div>`
 }
