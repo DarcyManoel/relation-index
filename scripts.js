@@ -22,37 +22,33 @@ function selectPerson(id){
 }
 function renderPerson(){
 	let person=persons[selectedPersonId]
+	let{alias,given,family}=person.name
 	let{birth,death}=person.lifespan
-	//	banner
-	document.getElementById(`banner`).innerHTML=`
-		<div id="name">${persons[selectedPersonId].name.given[0]} ${persons[selectedPersonId].name.family.join(`-`)}</div>
-		<div class="lifespan">${birth||``} - ${death||``}</div>`
-	//	relations
+	document.getElementById(`banner`).innerHTML=renderBanner()
 	let relations=person.relations
 	document.getElementById(`relations`).innerHTML=relationDisplayOrder.map(
 		relationType=>!relations?.[relationType]?.length?``:`
 			<details open id="${relationType}">
 				<summary>${capitaliseFirstLetter(relationType)}</summary>
 				${relations[relationType]
-					.sort((a,b)=>(b%1===0)-(a%1===0))
-					.map(renderRelation).join(``)}
+					.sort((a,b)=>(+b===b)-(+a===a))
+					.map(relation=>{
+						let isIndex=+relation===relation
+						return isIndex
+							?renderBanner(relation)
+							:`<div>${relation}</div>`})
+					.join(``)}
 			</details>`).join(``)
 }
-function renderRelation(relation){
-	if(typeof relation===`number`){
-		let person=persons[relation]
-		let fullName=Object.values(person.name)
-			.map(nameType=>nameType.join(`-`))
-			.join(` `)
-		let lifespan=`${person.lifespan.birth||``} - ${person.lifespan.death||``}`
-		return`
-			<div onclick="selectPerson(${relation})">
-				${fullName}
-				<div class="lifespan">${lifespan}</div>
-			</div>`
-	}else{
-		return`<div>${relation}</div>`
-	}
+function renderBanner(index=selectedPersonId){
+	let person=persons[index]
+	let{alias,given,family}=person.name
+	let{birth,death}=person.lifespan
+	return`
+		<div onclick="selectPerson(${index})">
+			<div>${given[0]} ${family.join(`-`)}</div>
+			<div class="lifespan">${birth||``} - ${death||``}</div>
+		</div>`
 }
 function importData(){
 	let fileInput=document.createElement(`input`)
