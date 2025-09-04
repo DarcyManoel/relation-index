@@ -8,13 +8,19 @@ function createPerson(){
 		lifespan:{
 			birth:null,
 			death:null
+		},
+		relations:{
+			parents:[],
+			siblings:[],
+			children:[]
 		}
 	})
 	selectPerson(persons.length-1)
 }
 let relationDisplayOrder=[
 	`parents`,
-	`children`,
+	`siblings`,
+	`children`
 ]
 function selectPerson(id){
 	selectedPersonId=id
@@ -53,6 +59,23 @@ function renderBanner(index=selectedPersonId){
 			<div class="lifespan">${birth||``} - ${death||``}</div>
 		</div>`
 }
+function inferRelations(){
+	for(let personIndex in persons){
+		let person=persons[personIndex]
+		//	siblings
+		let siblings=(person.relations.siblings??=[])
+		for(let parentIndex of person.relations.parents){
+			if(+parentIndex!==parentIndex)continue
+			let parent=persons[parentIndex]
+			for(let childIndex of parent.relations.children){
+				if(childIndex===+personIndex)continue
+				if(siblings.includes(childIndex))continue
+				siblings.push(childIndex)
+			}
+		}
+	}
+	renderPerson()
+}
 function importData(){
 	let fileInput=document.createElement(`input`)
 	fileInput.type=`file`
@@ -63,7 +86,7 @@ function importData(){
 		reader.onload=()=>{
 			selectedPersonId=0
 			console.log(persons=JSON.parse(reader.result))
-			renderPerson()
+			inferRelations()
 		}
 		reader.readAsText(e.target.files[0])
 		document.body.removeChild(fileInput)
