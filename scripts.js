@@ -31,7 +31,10 @@ function renderPerson(){
 			<details open id="${relationType}">
 				<summary>${capitaliseFirstLetter(relationType)}</summary>
 				${relations[relationType]
-					.sort((a,b)=>(+b===b)-(+a===a))
+					.sort((a,b)=>
+						(+b===b)-(+a===a)||
+						(persons[a]?.lifespan.birth)-(persons[b]?.lifespan.birth)
+					)
 					.map(relation=>{
 						let isIndex=+relation===relation
 						return isIndex
