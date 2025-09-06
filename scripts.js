@@ -50,11 +50,14 @@ function renderPerson(){
 			</details>`).join(``)
 }
 function renderBanner(index=selectedPersonId){
+	let onclick=index!==selectedPersonId
+		?`onclick="selectPerson(${index})"`
+		:``
 	let person=persons[index]
 	let{alias,given,family}=person.name
 	let{birth,death}=person.lifespan
 	return`
-		<div onclick="selectPerson(${index})">
+		<div ${onclick}>
 			<div>${given[0]} ${family.join(`-`)} <span class="inline-container">${(alias||[]).map(a=>`<div hidden="until-found">'${a}'</div>`).join(``)}</span></div>
 			<div class="lifespan">${birth||``} - ${death||``}</div>
 		</div>`
