@@ -37,19 +37,12 @@ function renderPerson(){
 			<details open id="${relationType}">
 				<summary>${capitaliseFirstLetter(relationType)}</summary>
 				${relations[relationType]
-					.sort((a,b)=>
-						(+b===b)-(+a===a)||
-						(persons[a]?.lifespan.birth)-(persons[b]?.lifespan.birth)
-					)
-					.map(relation=>{
-						let isIndex=+relation===relation
-						return isIndex
-							?renderBanner(relation)
-							:`<div>${relation}</div>`})
-					.join(``)}
+					.sort((a,b)=>(persons[a]?.lifespan.birth)-(persons[b]?.lifespan.birth))
+					.map(relation=>renderBanner(relation)).join(``)}
 			</details>`).join(``)
 }
 function renderBanner(index=selectedPersonId){
+	if(+index!==index)return
 	let onclick=index!==selectedPersonId
 		?`onclick="selectPerson(${index})"`
 		:``
