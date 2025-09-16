@@ -34,12 +34,12 @@ function renderPerson(){
 	let relations=person.relations
 	document.getElementById(`relations`).innerHTML=relationDisplayOrder.map(
 		relationType=>!relations?.[relationType]?.length?``:`
-			<details open id="${relationType}">
-				<summary>${capitaliseFirstLetter(relationType)}</summary>
+			<div class="details" open id="${relationType}">
+				<div class="summary" onclick="this.parentElement.toggleAttribute('open')">${capitaliseFirstLetter(relationType)}</div>
 				${relations[relationType]
 					.sort((a,b)=>(persons[a]?.lifespan.birth)-(persons[b]?.lifespan.birth))
 					.map(relation=>renderBanner(relation)).join(``)}
-			</details>`).join(``)
+			</div>`).join(``)
 }
 function renderBanner(index=selectedPersonId){
 	if(+index!==index)return
@@ -50,7 +50,7 @@ function renderBanner(index=selectedPersonId){
 	let{alias,given,family}=person.name
 	let{birth,death}=person.lifespan
 	return`
-		<div ${onclick}>
+		<div ${onclick} class="banner">
 			<div>${given[0]} ${family.join(`-`)} <span class="inline-container">${(alias||[]).map(a=>`<div hidden="until-found">'${a}'</div>`).join(``)}</span></div>
 			<div class="lifespan">${birth||``} - ${death||``}</div>
 		</div>`
