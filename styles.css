@@ -4,9 +4,10 @@
 *{
 	box-sizing:border-box;
 	interpolate-size:allow-keywords;
-	outline:none;
-	transition:.25s;
 	line-height:1.2;
+	outline:none;
+	overscroll-behavior:none;
+	transition:.25s;
 }
 @font-face{
 	font-family:UbuntuSans;
@@ -23,7 +24,84 @@ body{
 	font-family:UbuntuSans;
 	margin:0;
 	height:100vh;
-	overscroll-behavior:none;
+	>#modal-container{
+		backdrop-filter:brightness(.75);
+		height:100%;
+		left:0;
+		position:fixed;
+		top:0;
+		width:100%;
+		>#modal{
+			background:white;
+			border-radius:2em;
+			box-shadow:0 0 2em -.5em black;
+			padding:1em 2em 2em;
+			position:absolute;
+			left:50%;
+			top:30%;
+			translate:-50%-50%;
+			user-select:none;
+			>.title{
+				font-family:UbuntuSansBold;
+				font-size:1.5em;
+			}
+			>#persons{
+				background:#f6f6f6;
+				border-bottom:1px solid black;
+				border-top:1px solid black;
+				color:red;
+				height:calc(12em + 1px);
+				margin:2em 0 1em;
+				overflow-y:scroll;
+				>div{
+					cursor:pointer;
+					padding-left:1em;
+					padding-right:1em;
+					white-space:nowrap;
+				}
+				>div:hover{
+					padding-left:2em;
+					padding-right:0;
+				}
+				>.related{
+					color:green;
+				}
+			}
+			>#persons:before{
+				color:black;
+				content:'Persons ('attr(childCount)')';
+				font-family:UbuntuSansBold;
+				font-size:1.2em;
+				position:absolute;
+				translate:0 -1.4em;
+			}
+			>.buttons{
+				display:flex;
+				gap:.5em;
+				justify-content:flex-end;
+				>div{
+					border-radius:.75em;
+					color:white;
+					cursor:pointer;
+					opacity:.75;
+					padding:.5em 1em;
+				}
+				>div:hover{
+					box-shadow:0 0 2em -1em black;
+					opacity:1;
+				}
+				>.revert{
+					background:#f44336;
+				}
+				>.save{
+					background:#04AA6D;
+				}
+			}
+		}
+	}
+	>#modal-container:has(>#modal:empty){
+		display:none;
+	}
 	>#banner{
 		background:white;
 		border-bottom:1px solid #aaa;
@@ -33,15 +111,47 @@ body{
 	>#relations{
 		padding:1rem 0;
 		>.details{
-			height:1.2em;
-			overflow:hidden;
-			transition:height .25s;
 			>.summary{
 				color:black;
 				cursor:pointer;
 				font-family:UbuntuSansBold;
 				padding:0 2rem;
 				user-select:none;
+				>.summary-action{
+					border-radius:1em;
+					display:none;
+					margin-left:.5em;
+					position:relative;
+					padding:0 calc(.6em - .9ch);
+				}
+				>.summary-action:hover{
+					backdrop-filter:brightness(.85);
+				}
+				>.summary-action[tooltip]:hover:before{
+					background:white;
+					border-radius:.25em;
+					bottom:130%;
+					box-shadow:0 0 2em -.5em black;
+					content:attr(tooltip);
+					left:50%;
+					translate:-50%;
+					padding:.25em .5em;
+					position:absolute;
+					white-space:nowrap;
+				}
+				>.summary-action[tooltip]:hover:after{
+					border-left:5px solid transparent;
+					border-right:5px solid transparent;
+					border-top:5px solid white;
+					content:'';
+					height:0;
+					left:50%;
+					position:absolute;
+					top:-30%;
+					translate:-50%;
+					white-space:nowrap;
+					width:0;
+				}
 			}
 			>.summary:before{
 				content:'>';
@@ -49,28 +159,40 @@ body{
 				transition:inherit;
 				translate:-.75em;
 			}
-			>.banner{
-				color:#f33;
-				padding:.1rem 3rem;
-			}
-			>.banner[onclick]{
-				color:#33f;
-				cursor:pointer;
-				user-select:none;
-			}
-			>.banner[onclick]:hover{
-				backdrop-filter:brightness(.9);
+			>.content{
+				height:0;
+				overflow:hidden;
+				transition:height .25s;
+				>.banner{
+					color:#f33;
+					padding:.1rem 3rem;
+				}
+				>.banner[onclick]{
+					color:#33f;
+					cursor:pointer;
+					user-select:none;
+				}
+				>.banner[onclick]:hover{
+					backdrop-filter:brightness(.9);
+				}
 			}
 		}
 		>.details:hover{
 			background:#ddd;
 		}
+		>.details[open]:hover{
+			>.summary{
+				>.summary-action{
+					display:inline-block;
+				}
+			}
+		}
 		>.details[open]{
-			height:auto;
 			>.summary:before{
 				rotate:90deg;
 			}
-			>.banner{
+			>.content{
+				height:auto;
 			}
 		}
 	}
@@ -80,10 +202,10 @@ body{
 	}
 }
 .inline-container{
-	div{
+	>div{
 		display:inline-block;
 	}
-	div:not([hidden]){
+	>div:not([hidden]){
 		font-size:.66em;
 		margin-right:.4em;
 	}
