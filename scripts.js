@@ -81,7 +81,12 @@ let originalRelations=[] // an array to store a copy of the person's relations b
 function editRelations(relationType){
 	originalRelations=[...persons[selectedPersonId].relations[relationType]] // clone current relations to allow later reversion
 	document.getElementById(`modal`).innerHTML=`
-		<div class="title">${capitaliseFirstLetter(relationType)}</div>
+		<select class="title" onchange="revertChanges('${relationType}');editRelations(this.value.toLowerCase())">
+			<option>${capitaliseFirstLetter(relationType)}</option>
+			${Object.keys(persons[selectedPersonId].relations)
+				.filter(type=>type!==relationType)
+				.map(relationType=>`<option>${capitaliseFirstLetter(relationType)}</option>`)}
+		</select>
 		<div id="persons" childCount="${persons.length-1}">
 			${persons
 				.map((key,index)=>index===selectedPersonId?``

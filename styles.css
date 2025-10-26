@@ -44,6 +44,7 @@ body{
 			>.title{
 				font-family:UbuntuSansBold;
 				font-size:1.5em;
+				translate:-.15em;
 			}
 			>#persons{
 				background:#f6f6f6;
@@ -200,6 +201,9 @@ body{
 		content:'There are no records.';
 		margin-left:1.25rem;
 	}
+}
+select{
+	border:none;
 }
 .inline-container{
 	>div{
