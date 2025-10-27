@@ -112,11 +112,12 @@ body{
 	>#relations{
 		padding:1rem 0;
 		>.details{
+			opacity:.5;
 			>.summary{
 				color:black;
 				cursor:pointer;
 				font-family:UbuntuSansBold;
-				padding:0 2rem;
+				padding:.25em 2rem;
 				user-select:none;
 				>.summary-action{
 					border-radius:1em;
@@ -155,10 +156,12 @@ body{
 				}
 			}
 			>.summary:before{
-				content:'>';
+				content:'\29CB';
 				position:absolute;
+				rotate:90deg;
+				transform-origin:50% 66%;
 				transition:inherit;
-				translate:-.75em;
+				translate:-1em -.2em;
 			}
 			>.content{
 				height:0;
@@ -189,8 +192,9 @@ body{
 			}
 		}
 		>.details[open]{
+			opacity:1;
 			>.summary:before{
-				rotate:90deg;
+				rotate:180deg;
 			}
 			>.content{
 				height:auto;
