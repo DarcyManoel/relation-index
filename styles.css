@@ -120,14 +120,13 @@ body{
 				padding:.25em 2rem;
 				user-select:none;
 				>.summary-action{
-					border-radius:1em;
 					display:none;
 					margin-left:.5em;
+					opacity:.5;
 					position:relative;
-					padding:0 calc(.6em - .9ch);
 				}
 				>.summary-action:hover{
-					backdrop-filter:brightness(.85);
+					opacity:1;
 				}
 				>.summary-action[tooltip]:hover:before{
 					background:white;

@@ -35,7 +35,7 @@ function renderPerson(){
 	document.getElementById(`relations`).innerHTML=relationDisplayOrder.map(
 		relationType=>!relations?.[relationType]?.length?``:`
 			<div class="details" open id="${relationType}">
-				<div class="summary" onclick="this.parentElement.toggleAttribute('open')">${capitaliseFirstLetter(relationType)}<div class="summary-action" tooltip="Add Relation" onclick="event.stopPropagation();editRelations('${relationType}')">&#65291;</div></div>
+				<div class="summary" onclick="this.parentElement.toggleAttribute('open')">${capitaliseFirstLetter(relationType)}<div class="summary-action" tooltip="Edit Relations" onclick="event.stopPropagation();editRelations('${relationType}')">&#9998;</div></div>
 				<div class="content">
 				${relations[relationType]
 					.sort((a,b)=>(persons[a]?.lifespan.birth)-(persons[b]?.lifespan.birth))
