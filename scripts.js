@@ -30,7 +30,7 @@ function renderPerson(){
 	document.getElementById(`relations`).innerHTML=relationTypes.map(
 		relationType=>!relations?.[relationType.id]?.length?``:`
 			<div class="details" open id="${relationType.id}">
-				<div class="summary" onclick="this.parentElement.toggleAttribute('open')">${relationType.name}<div class="summary-action" tooltip="Edit Relations" onclick="event.stopPropagation();editRelations('${relationType.id}')">&#9998;</div></div>
+				<div class="summary" onclick="this.parentElement.toggleAttribute('open')">${relationType.name}<div class="summary-action" tooltip="Edit Relations" onclick="event.stopPropagation();editRelations(0,'${relationType.id}')">&#9998;</div></div>
 				<div class="content">
 				${relations[relationType.id]
 					.sort((a,b)=>(persons[a]?.lifespan.birth)-(persons[b]?.lifespan.birth))
@@ -72,11 +72,11 @@ function inferRelations(){
 function hideModal(){
 	document.getElementById(`modal`).innerHTML=``
 }
-let originalRelations=[] // an array to store a copy of the person's relations before editing
-function editRelations(selectedRelationType){
-	originalRelations=[...persons[selectedPersonId].relations[selectedRelationType]??``] // clone current relations to allow later reversion
+let originalRelations={} // create object to store original relations when editing relations in case of reversion
+function editRelations(fromModal,selectedRelationType){
+	if(!fromModal)originalRelations=JSON.parse(JSON.stringify(persons[selectedPersonId].relations)) // clone current relations to allow later reversion
 	document.getElementById(`modal`).innerHTML=`
-		<select class="title" onchange="revertChanges('${selectedRelationType}');editRelations(this.value.toLowerCase())">
+		<select class="title" onchange="editRelations(1,this.value.toLowerCase())">
 			<option>${capitaliseFirstLetter(selectedRelationType)}</option>
 			${relationTypes // populate list of relation types that can be selected
 				.filter(relationType=>relationType.id!==selectedRelationType)
@@ -88,7 +88,7 @@ function editRelations(selectedRelationType){
 					:`<div id="p${index}" onclick="toggleRelation(+this.id.slice(1),'${selectedRelationType}')">${renderBanner(index)}</div>`).join(``)}
 		</div>
 		<div class="buttons">
-			<div class="revert" onclick="revertChanges('${selectedRelationType}')">Revert</div>
+			<div class="revert" onclick="revertRelationChanges()">Revert</div>
 			<div class="save" onclick="hideModal()">Save Changes</div>
 		</div>
 	` // inject modal markup with title, person list, and action buttons
@@ -121,8 +121,8 @@ function toggleRelation(personId,relationType){
 	highlightModalRelations(relationType) // refresh person highlights in modal
 	renderPerson() // re-render person display to reflect changes
 }
-function revertChanges(relationType){
-	persons[selectedPersonId].relations[relationType]=originalRelations // revert changes made to the selected relations by restoring to the state before edits were made
+function revertRelationChanges(){
+	persons[selectedPersonId].relations=JSON.parse(JSON.stringify(originalRelations)) // revert changes made to relations by restoring to the state before edits were made
 	renderPerson() // re-render person display to reflect the reversion
 	hideModal()
 }
