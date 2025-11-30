@@ -17,11 +17,6 @@ function createPerson(){
 	})
 	selectPerson(persons.length-1)
 }
-let relationDisplayOrder=[
-	`parents`,
-	`siblings`,
-	`children`
-]
 function selectPerson(id){
 	selectedPersonId=id
 	renderPerson()
@@ -32,12 +27,12 @@ function renderPerson(){
 	let{birth,death}=person.lifespan
 	document.getElementById(`banner`).innerHTML=renderBanner()
 	let relations=person.relations
-	document.getElementById(`relations`).innerHTML=relationDisplayOrder.map(
-		relationType=>!relations?.[relationType]?.length?``:`
-			<div class="details" open id="${relationType}">
-				<div class="summary" onclick="this.parentElement.toggleAttribute('open')">${capitaliseFirstLetter(relationType)}<div class="summary-action" tooltip="Edit Relations" onclick="event.stopPropagation();editRelations('${relationType}')">&#9998;</div></div>
+	document.getElementById(`relations`).innerHTML=relationTypes.map(
+		relationType=>!relations?.[relationType.id]?.length?``:`
+			<div class="details" open id="${relationType.id}">
+				<div class="summary" onclick="this.parentElement.toggleAttribute('open')">${relationType.name}<div class="summary-action" tooltip="Edit Relations" onclick="event.stopPropagation();editRelations('${relationType.id}')">&#9998;</div></div>
 				<div class="content">
-				${relations[relationType]
+				${relations[relationType.id]
 					.sort((a,b)=>(persons[a]?.lifespan.birth)-(persons[b]?.lifespan.birth))
 					.map(relation=>renderBanner(relation,1)).join(``)}
 				</div>
@@ -78,51 +73,51 @@ function hideModal(){
 	document.getElementById(`modal`).innerHTML=``
 }
 let originalRelations=[] // an array to store a copy of the person's relations before editing
-function editRelations(relationType){
-	originalRelations=[...persons[selectedPersonId].relations[relationType]] // clone current relations to allow later reversion
+function editRelations(selectedRelationType){
+	originalRelations=[...persons[selectedPersonId].relations[selectedRelationType]??``] // clone current relations to allow later reversion
 	document.getElementById(`modal`).innerHTML=`
-		<select class="title" onchange="revertChanges('${relationType}');editRelations(this.value.toLowerCase())">
-			<option>${capitaliseFirstLetter(relationType)}</option>
-			${Object.keys(persons[selectedPersonId].relations)
-				.filter(type=>type!==relationType)
-				.map(relationType=>`<option>${capitaliseFirstLetter(relationType)}</option>`)}
+		<select class="title" onchange="revertChanges('${selectedRelationType}');editRelations(this.value.toLowerCase())">
+			<option>${capitaliseFirstLetter(selectedRelationType)}</option>
+			${relationTypes // populate list of relation types that can be selected
+				.filter(relationType=>relationType.id!==selectedRelationType)
+				.map(relationType=>`<option>${relationType.name}</option>`)}
 		</select>
 		<div id="persons" childCount="${persons.length-1}">
-			${persons
+			${persons // populate list of all persons to be later highlighted
 				.map((key,index)=>index===selectedPersonId?``
-					:`<div id="p${index}" onclick="toggleRelation(+this.id.slice(1),'${relationType}')">${renderBanner(index)}</div>`).join(``)}
+					:`<div id="p${index}" onclick="toggleRelation(+this.id.slice(1),'${selectedRelationType}')">${renderBanner(index)}</div>`).join(``)}
 		</div>
 		<div class="buttons">
-			<div class="revert" onclick="revertChanges('${relationType}')">Revert</div>
+			<div class="revert" onclick="revertChanges('${selectedRelationType}')">Revert</div>
 			<div class="save" onclick="hideModal()">Save Changes</div>
 		</div>
 	` // inject modal markup with title, person list, and action buttons
-	highlightModalRelations(relationType) // visually highlight current relations
+	highlightModalRelations(selectedRelationType) // visually highlight current relations
 }
 function highlightModalRelations(relationType){
 	for(person of document.getElementById(`persons`).children){
 		document.getElementById(person.id).classList.remove(`related`) // clear any existing highlight
-		if(persons[selectedPersonId].relations[relationType].includes(+person.id.slice(1))){
+		if((persons[selectedPersonId].relations[relationType]??[]).includes(+person.id.slice(1))){
 			document.getElementById(person.id).classList.add(`related`)
 		} // check if this person is related to the selected person under the given type and apply highlight if relation exists
 	}
 }
-let nonreciprocalRelationLinks={
-	parents:`children`,
-	children:`parents`
-} // map relation types that are not reciprocal
+let relationTypes=[
+	{id:`parents`,name:`Parents`,target:`children`}, // directed
+	{id:`siblings`,name:`Siblings`,target:`siblings`}, // reciprocal
+	{id:`children`,name:`Children`,target:`parents`}, // directed
+]
 function toggleRelation(personId,relationType){
-	let targetLink=nonreciprocalRelationLinks[relationType]||relationType // decide which relation type to update on the target person
-	let selectedRelations=persons[selectedPersonId].relations[relationType] // array of selected person's relations for this type
-	let targetRelations=persons[personId].relations[targetLink] // array of the target person's relations for corresponding type
-	if(selectedRelations.includes(personId)){
+	let targetLink=relationTypes.find(relation=>relation.id===relationType).target // decide which relation type to update on the target person
+	let selectedRelations=persons[selectedPersonId].relations[relationType]??=[] // array of selected person's relations for this type
+	let targetRelations=persons[personId].relations[targetLink]??=[] // array of the target person's relations for corresponding type
+	if(selectedRelations.includes(personId)){ // relation exists, remove it
 		persons[selectedPersonId].relations[relationType]=selectedRelations.filter(relation=>relation!==personId) // remove target person from selected person
 		persons[personId].relations[targetLink]=targetRelations.filter(relation=>relation!==selectedPersonId) // remove selected person from target person
-	} // relation exists, remove it
-	else{
+	}else{ // relation missing, add it
 		selectedRelations.push(personId) // add target person to selected person
 		targetRelations.push(selectedPersonId) // add selected person to target person
-	} // relation missing, add it
+	}
 	highlightModalRelations(relationType) // refresh person highlights in modal
 	renderPerson() // re-render person display to reflect changes
 }
