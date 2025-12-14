@@ -25,17 +25,14 @@ function renderPerson(){
 	let person=persons[selectedPersonId]
 	let{alias,given,family}=person.name
 	let{birth,death}=person.lifespan
-	document.getElementById(`banner`).innerHTML=renderBanner()
+	document.getElementById(`name`).innerHTML=renderBanner()
 	let relations=person.relations
-	document.getElementById(`relations`).innerHTML=relationTypes.map(
+	document.getElementById(`Relations`).querySelector(`.content`).innerHTML=relationTypes.map(
 		relationType=>!relations?.[relationType.id]?.length?``:`
-			<div class="details" open id="${relationType.id}">
-				<div class="summary" onclick="this.parentElement.toggleAttribute('open')">${relationType.name}<div class="summary-action" tooltip="Edit Relations" onclick="event.stopPropagation();editRelations(0,'${relationType.id}')">&#9998;</div></div>
-				<div class="content">
+			<div class="relations" before="${relationType.name}">
 				${relations[relationType.id]
 					.sort((a,b)=>(persons[a]?.lifespan.birth)-(persons[b]?.lifespan.birth))
 					.map(relation=>renderBanner(relation,1)).join(``)}
-				</div>
 			</div>`).join(``)
 }
 function renderBanner(index=selectedPersonId,allowOnclick){
@@ -69,11 +66,14 @@ function inferRelations(){
 	}
 	renderPerson()
 }
+function showModal(){
+	document.getElementById(`modal-container`).removeAttribute(`style`)
+}
 function hideModal(){
-	document.getElementById(`modal`).innerHTML=``
+	document.getElementById(`modal-container`).style=`opacity:0;pointer-events:none;`
 }
 let originalRelations={} // create object to store original relations when editing relations in case of reversion
-function editRelations(fromModal,selectedRelationType){
+function editRelations(fromModal,selectedRelationType=relationTypes[0].id){
 	if(!fromModal)originalRelations=JSON.parse(JSON.stringify(persons[selectedPersonId].relations)) // clone current relations to allow later reversion
 	document.getElementById(`modal`).innerHTML=`
 		<select class="title" onchange="editRelations(1,this.value.toLowerCase())">
@@ -93,6 +93,7 @@ function editRelations(fromModal,selectedRelationType){
 		</div>
 	` // inject modal markup with title, person list, and action buttons
 	highlightModalRelations(selectedRelationType) // visually highlight current relations
+	showModal()
 }
 function highlightModalRelations(relationType){
 	for(person of document.getElementById(`persons`).children){

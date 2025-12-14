@@ -5,13 +5,23 @@
 		<title>Relation Index</title>
 	</head>
 	<body spellcheck="false">
-		<div id="modal-container" class="hidden-modal">
+		<div id="Summary">
+			<div></div>
+			<div id="core">
+				<div id="images"></div>
+				<div id="name"></div>
+			</div>
+			<div></div>
+		</div>
+		<div id="Relations">
+			<div class="edit" onclick="editRelations(0)">&#9998;</div>
+			<div class="content"></div>
+		</div>
+		<!---->
+		<div id="modal-container" class="hidden-modal" style="opacity:0;pointer-events:none;">
 			<div id="modal"></div>
 		</div>
-		<div id="banner">
-		</div>
-		<div id="relations">
-		</div>
+		<!---->
 	</body>
 	<script type="text/javascript"src="scripts.js"></script>
 	<script type="text/javascript"src="index.js"></script>

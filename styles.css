@@ -4,7 +4,6 @@
 *{
 	box-sizing:border-box;
 	interpolate-size:allow-keywords;
-	line-height:1.2;
 	outline:none;
 	overscroll-behavior:none;
 	transition:.25s;
@@ -18,51 +17,215 @@
 	src:url(fonts/UbuntuSans-SemiBold.ttf);
 }
 body{
+	background-blend-mode:overlay;
 	background:#eee;
 	display:flex;
 	flex-direction:column;
 	font-family:UbuntuSans;
-	margin:0;
-	height:100vh;
+	font-size:1.75vmin;
+	gap:4vmin;
+	margin:30vmin 5vmin 0;
+	>div{
+		background:white;
+		border-radius:0 2vmin 2vmin 2vmin;
+		box-shadow:
+			0 0 0 .1vmin #ddd,
+			0 0 0 .2vmin white,
+			0 0 0 .3vmin #ddd;
+		display:flex;
+		flex-wrap:wrap;
+		gap:2vmin;
+		justify-content:center;
+		padding:2vmin;
+		position:relative;
+		>.edit{
+			bottom:100%;
+			font-size:2vmin;
+			opacity:0;
+			padding:.5vmin 1.25vmin;
+			position:absolute;
+			right:100%;
+			translate:0 .5vmin;
+			cursor:pointer;
+		}
+		>.edit:before{
+			background:white;
+			border-radius:.25em;
+			bottom:130%;
+			box-shadow:0 0 3vmin -1vmin black;
+			content:'Edit Relations';
+			font-size:1.75vmin;
+			left:0;
+			opacity:0;
+			padding:.25em .5em;
+			pointer-events:none;
+			position:absolute;
+			white-space:nowrap;
+		}
+		>.edit:after{
+			border-left:5px solid transparent;
+			border-right:5px solid transparent;
+			border-top:5px solid white;
+			content:'';
+			height:0;
+			left:50%;
+			opacity:0;
+			pointer-events:none;
+			position:absolute;
+			top:-30%;
+			translate:-50%;
+			white-space:nowrap;
+			width:0;
+		}
+		>.edit:hover:before,
+		>.edit:hover:after{
+			opacity:1;
+		}
+	}
+	>div:before{
+		background:white;
+		border-bottom:none;
+		border-radius:2vmin 2vmin 0 0;
+		bottom:calc(100% - .42vmin);
+		box-shadow:
+			0 0 0 .1vmin #ddd,
+			0 0 0 .2vmin white,
+			0 0 0 .3vmin #ddd;
+		clip-path:polygon(
+			-.4vmin -.4vmin,
+			calc(100% + .4vmin) -.4vmin,
+			calc(100% + .4vmin) calc(100% - .4vmin - .4vmin),
+			calc(100% + .4vmin - .4vmin) calc(100% - .4vmin),
+			-.4vmin calc(100% - .4vmin));
+		content:attr(id);
+		left:0;
+		padding:.5vmin 1vmin;
+		position:absolute;
+	}
+	>div:hover{
+		>.edit{
+			opacity:.25;
+		}
+		>.edit:hover{
+			opacity:1;
+		}
+	}
+	>#summary{
+		display:flex;
+		gap:2vmin;
+		>div{
+			flex:1;
+		}
+		>#core{
+			display:flex;
+			flex-direction:column;
+			padding:11vmin 0 2vmin;
+			position:relative;
+			>#images{
+				aspect-ratio:1;
+				background:#ddd;
+				border-radius:2vmin;
+				bottom:100%;
+				left:50%;
+				position:absolute;
+				translate:-50%+50%;
+				width:18vmin;
+			}
+			>#name{
+				font-size:3.5vmin;
+				margin:auto;
+				text-wrap-mode:nowrap;
+			}
+		}
+	}
+	>#relations{
+		>.content{
+			>.relations{
+				position:relative;
+				text-wrap-mode:nowrap;
+				width:fit-content;
+				>.banner{
+					color:#f33;
+					margin-left:1.5vmin;
+					user-select:none;
+				}
+				>.banner[onclick]{
+					color:#33f;
+					cursor:pointer;
+					opacity:1;
+				}
+				>.banner[onclick]:before{
+					color:black;
+					content:'\29CB';
+					left:0;
+					opacity:0;
+					pointer-events:none;
+					position:absolute;
+					rotate:90deg;
+						}
+				>.banner[onclick]:hover:before{
+					opacity:1;
+				}
+			}
+			>.relations:before{
+				content:attr(before);
+				font-family:UbuntuSansBold;
+			}
+		}
+	}
 	>#modal-container{
 		backdrop-filter:brightness(.75);
+		background:none;
+		border-radius:0;
 		height:100%;
 		left:0;
 		position:fixed;
 		top:0;
+		transition:.25s;
 		width:100%;
 		>#modal{
 			background:white;
-			border-radius:2em;
-			box-shadow:0 0 2em -.5em black;
-			padding:1em 2em 2em;
-			position:absolute;
+			border-radius:2vmin;
+			box-shadow:
+				0 0 0 .1vmin #ddd,
+				0 0 0 .2vmin white,
+				0 0 0 .3vmin #ddd;
 			left:50%;
+			padding:1.5vmin 3vmin 2vmin;
+			position:absolute;
 			top:30%;
 			translate:-50%-50%;
 			user-select:none;
 			>.title{
 				font-family:UbuntuSansBold;
-				font-size:1.5em;
-				translate:-.15em;
+				font-size:3vmin;
+				translate:-.45vmin;
 			}
 			>#persons{
 				background:#f6f6f6;
 				border-bottom:1px solid black;
 				border-top:1px solid black;
 				color:red;
-				height:calc(12em + 1px);
+				height:21vmin;
 				margin:2em 0 1em;
 				overflow-y:scroll;
 				>div{
 					cursor:pointer;
 					padding-left:1em;
-					padding-right:1em;
+					position:relative;
 					white-space:nowrap;
 				}
-				>div:hover{
-					padding-left:2em;
-					padding-right:0;
+				>div:before{
+					color:black;
+					content:'\29CB';
+					left:1px;
+					opacity:0;
+					pointer-events:none;
+					position:absolute;
+					rotate:90deg;
+						}
+				>div:hover:before{
+					opacity:1;
 				}
 				>.related{
 					color:green;
@@ -99,110 +262,6 @@ body{
 				}
 			}
 		}
-	}
-	>#modal-container:has(>#modal:empty){
-		display:none;
-	}
-	>#banner{
-		background:white;
-		border-bottom:1px solid #aaa;
-		font-size:2.25em;
-		padding:1rem 1.25rem 1.25rem;
-	}
-	>#relations{
-		padding:1rem 0;
-		>.details{
-			opacity:.5;
-			>.summary{
-				color:black;
-				cursor:pointer;
-				font-family:UbuntuSansBold;
-				padding:.25em 2rem;
-				user-select:none;
-				>.summary-action{
-					display:none;
-					margin-left:.5em;
-					opacity:.5;
-					position:relative;
-				}
-				>.summary-action:hover{
-					opacity:1;
-				}
-				>.summary-action[tooltip]:hover:before{
-					background:white;
-					border-radius:.25em;
-					bottom:130%;
-					box-shadow:0 0 2em -.5em black;
-					content:attr(tooltip);
-					left:50%;
-					translate:-50%;
-					padding:.25em .5em;
-					position:absolute;
-					white-space:nowrap;
-				}
-				>.summary-action[tooltip]:hover:after{
-					border-left:5px solid transparent;
-					border-right:5px solid transparent;
-					border-top:5px solid white;
-					content:'';
-					height:0;
-					left:50%;
-					position:absolute;
-					top:-30%;
-					translate:-50%;
-					white-space:nowrap;
-					width:0;
-				}
-			}
-			>.summary:before{
-				content:'\29CB';
-				position:absolute;
-				rotate:90deg;
-				transform-origin:50% 66%;
-				transition:inherit;
-				translate:-1em -.2em;
-			}
-			>.content{
-				height:0;
-				overflow:hidden;
-				transition:height .25s;
-				>.banner{
-					color:#f33;
-					padding:.1rem 3rem;
-				}
-				>.banner[onclick]{
-					color:#33f;
-					cursor:pointer;
-					user-select:none;
-				}
-				>.banner[onclick]:hover{
-					backdrop-filter:brightness(.9);
-				}
-			}
-		}
-		>.details:hover{
-			background:#ddd;
-		}
-		>.details[open]:hover{
-			>.summary{
-				>.summary-action{
-					display:inline-block;
-				}
-			}
-		}
-		>.details[open]{
-			opacity:1;
-			>.summary:before{
-				rotate:180deg;
-			}
-			>.content{
-				height:auto;
-			}
-		}
-	}
-	>#relations:empty:after{
-		content:'There are no records.';
-		margin-left:1.25rem;
 	}
 }
 select{
