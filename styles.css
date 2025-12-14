@@ -6,7 +6,6 @@
 	interpolate-size:allow-keywords;
 	outline:none;
 	overscroll-behavior:none;
-	transition:.25s;
 }
 @font-face{
 	font-family:UbuntuSans;
@@ -25,7 +24,7 @@ body{
 	font-size:1.75vmin;
 	gap:4vmin;
 	margin:30vmin 5vmin 0;
-	>div{
+	>.section{
 		background:white;
 		border-radius:0 2vmin 2vmin 2vmin;
 		box-shadow:
@@ -45,6 +44,7 @@ body{
 			padding:.5vmin 1.25vmin;
 			position:absolute;
 			right:100%;
+			transition:.25s;
 			translate:0 .5vmin;
 			cursor:pointer;
 		}
@@ -60,6 +60,7 @@ body{
 			padding:.25em .5em;
 			pointer-events:none;
 			position:absolute;
+			transition:.25s;
 			white-space:nowrap;
 		}
 		>.edit:after{
@@ -73,6 +74,7 @@ body{
 			pointer-events:none;
 			position:absolute;
 			top:-30%;
+			transition:.25s;
 			translate:-50%;
 			white-space:nowrap;
 			width:0;
@@ -82,7 +84,15 @@ body{
 			opacity:1;
 		}
 	}
-	>div:before{
+	>.section:hover{
+		>.edit{
+			opacity:.25;
+		}
+		>.edit:hover{
+			opacity:1;
+		}
+	}
+	>.section:before{
 		background:white;
 		border-bottom:none;
 		border-radius:2vmin 2vmin 0 0;
@@ -101,14 +111,6 @@ body{
 		left:0;
 		padding:.5vmin 1vmin;
 		position:absolute;
-	}
-	>div:hover{
-		>.edit{
-			opacity:.25;
-		}
-		>.edit:hover{
-			opacity:1;
-		}
 	}
 	>#summary{
 		display:flex;
@@ -162,7 +164,8 @@ body{
 					pointer-events:none;
 					position:absolute;
 					rotate:90deg;
-						}
+					transition:.25s;
+				}
 				>.banner[onclick]:hover:before{
 					opacity:1;
 				}
@@ -175,8 +178,6 @@ body{
 	}
 	>#modal-container{
 		backdrop-filter:brightness(.75);
-		background:none;
-		border-radius:0;
 		height:100%;
 		left:0;
 		position:fixed;
@@ -213,6 +214,7 @@ body{
 					cursor:pointer;
 					padding-left:1em;
 					position:relative;
+					transition:.25s;
 					white-space:nowrap;
 				}
 				>div:before{
@@ -223,7 +225,8 @@ body{
 					pointer-events:none;
 					position:absolute;
 					rotate:90deg;
-						}
+					transition:.25s;
+				}
 				>div:hover:before{
 					opacity:1;
 				}
