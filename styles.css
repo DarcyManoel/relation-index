@@ -50,14 +50,14 @@ body{
 		}
 		>.edit:before{
 			background:white;
-			border-radius:.25em;
-			bottom:130%;
+			border-radius:.5vmin;
+			bottom:110%;
 			box-shadow:0 0 3vmin -1vmin black;
 			content:'Edit Relations';
 			font-size:1.75vmin;
 			left:0;
 			opacity:0;
-			padding:.25em .5em;
+			padding:.5vmin 1vmin;
 			pointer-events:none;
 			position:absolute;
 			transition:.25s;
@@ -73,7 +73,7 @@ body{
 			opacity:0;
 			pointer-events:none;
 			position:absolute;
-			top:-30%;
+			top:-10%;
 			transition:.25s;
 			translate:-50%;
 			white-space:nowrap;
@@ -207,14 +207,14 @@ body{
 				border-bottom:1px solid black;
 				border-top:1px solid black;
 				color:red;
-				height:21vmin;
-				margin:2em 0 1em;
+				height:20vmin;
+				margin:3vmin 0 1vmin;
 				overflow-y:scroll;
 				>div{
 					cursor:pointer;
-					padding-left:1em;
+					padding-left:2vmin;
 					position:relative;
-					transition:.25s;
+					transition:color .25s;
 					white-space:nowrap;
 				}
 				>div:before{
@@ -225,7 +225,7 @@ body{
 					pointer-events:none;
 					position:absolute;
 					rotate:90deg;
-					transition:.25s;
+					transition:opacity .25s;
 				}
 				>div:hover:before{
 					opacity:1;
@@ -238,30 +238,29 @@ body{
 				color:black;
 				content:'Persons ('attr(childCount)')';
 				font-family:UbuntuSansBold;
-				font-size:1.2em;
+				font-size:2vmin;
 				position:absolute;
-				translate:0 -1.4em;
+				translate:0 -3vmin;
 			}
 			>.buttons{
 				display:flex;
-				gap:.5em;
+				gap:1vmin;
 				justify-content:flex-end;
 				>div{
-					border-radius:.75em;
+					border-radius:1vmin;
 					color:white;
 					cursor:pointer;
 					opacity:.75;
-					padding:.5em 1em;
+					padding:1vmin 2vmin;
 				}
 				>div:hover{
-					box-shadow:0 0 2em -1em black;
 					opacity:1;
 				}
 				>.revert{
 					background:#f44336;
 				}
 				>.save{
-					background:#04AA6D;
+					background:#04aa6d;
 				}
 			}
 		}
@@ -272,15 +271,16 @@ select{
 }
 .inline-container{
 	>div{
+		color:black;
 		display:inline-block;
 	}
 	>div:not([hidden]){
-		font-size:.66em;
-		margin-right:.4em;
+		font-size:1vmin;
+		margin-right:.5vmin;
 	}
 }
 .lifespan{
 	color:initial;
-	font-size:.66em;
-	margin-left:1em;
+	font-size:1vmin;
+	margin-left:1vmin;
 }
