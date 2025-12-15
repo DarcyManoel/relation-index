@@ -31,12 +31,14 @@ body{
 			0 0 0 .1vmin #ddd,
 			0 0 0 .2vmin white,
 			0 0 0 .3vmin #ddd;
-		display:flex;
-		flex-wrap:wrap;
-		gap:2vmin;
-		justify-content:center;
 		padding:2vmin;
 		position:relative;
+		>.content{
+			display:flex;
+			flex-wrap:wrap;
+			gap:2vmin;
+			justify-content:center;
+		}
 		>.edit{
 			bottom:100%;
 			font-size:2vmin;
