@@ -6,15 +6,23 @@
 	</head>
 	<body spellcheck="false">
 		<div id="Summary" class="section">
-			<div></div>
-			<div id="core">
-				<div id="images"></div>
-				<div id="name"></div>
+			<div class="section-actions">
+				<div class="collapse" tooltip="Collapse Section" onclick="this.parentElement.parentElement.classList.toggle(`closed`);"><div>&#10699;</div></div>
 			</div>
-			<div></div>
+			<div class="content">
+				<div></div>
+				<div id="core">
+					<div id="images"></div>
+					<div id="name"></div>
+				</div>
+				<div></div>
+			</div>
 		</div>
 		<div id="Relations" class="section">
-			<div class="edit" onclick="editRelations(0)">&#9998;</div>
+			<div class="section-actions">
+				<div class="collapse" tooltip="Collapse Section" onclick="this.parentElement.parentElement.classList.toggle(`closed`);"><div>&#10699;</div></div>
+				<div class="edit" tooltip="Edit Relations" onclick="editRelations(0)">&#9998;</div>
+			</div>
 			<div class="content"></div>
 		</div>
 		<!---->

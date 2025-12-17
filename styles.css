@@ -32,66 +32,82 @@ body{
 			0 0 0 .1vmin #ddd,
 			0 0 0 .2vmin white,
 			0 0 0 .3vmin #ddd;
-		padding:2vmin;
+		padding:3vmin 3vmin 0;
 		position:relative;
+		transition:.25s;
 		>.content{
 			display:flex;
 			flex-wrap:wrap;
 			gap:2vmin;
 			justify-content:center;
+			overflow-y:hidden;
+			padding-bottom:3vmin;
+			transition:.25s;
 		}
-		>.edit{
-			bottom:100%;
-			font-size:2vmin;
+		>.section-actions{
 			opacity:0;
-			padding:.5vmin 1.25vmin;
 			position:absolute;
 			right:100%;
+			top:-3vmin;
 			transition:.25s;
-			translate:0 .5vmin;
-			cursor:pointer;
-		}
-		>.edit:before{
-			background:white;
-			border-radius:.5vmin;
-			bottom:110%;
-			box-shadow:0 0 3vmin -1vmin black;
-			content:'Edit Relations';
-			font-size:1.75vmin;
-			left:0;
-			opacity:0;
-			padding:.5vmin 1vmin;
-			pointer-events:none;
-			position:absolute;
-			transition:.25s;
-			white-space:nowrap;
-		}
-		>.edit:after{
-			border-left:5px solid transparent;
-			border-right:5px solid transparent;
-			border-top:5px solid white;
-			content:'';
-			height:0;
-			left:50%;
-			opacity:0;
-			pointer-events:none;
-			position:absolute;
-			top:-10%;
-			transition:.25s;
-			translate:-50%;
-			white-space:nowrap;
-			width:0;
-		}
-		>.edit:hover:before,
-		>.edit:hover:after{
-			opacity:1;
+			>div{
+				cursor:pointer;
+				font-size:2vmin;
+				opacity:.25;
+				padding:.5vmin 1.25vmin;
+				position:relative;
+				transition:.25s;
+				text-align:center;
+			}
+			>div:hover{
+				opacity:1;
+			}
+			>div:hover:before,
+			>div:hover:after{
+				opacity:1;
+			}
+			>div:before{
+				background:white;
+				border-radius:.5vmin;
+				box-shadow:0 0 3vmin -.5vmin black;
+				content:attr(tooltip);
+				font-size:1.75vmin;
+				left:110%;
+				opacity:0;
+				padding:.5vmin 1vmin;
+				pointer-events:none;
+				position:absolute;
+				top:50%;
+				transition:.25s;
+				translate:0 -50%;
+				white-space:nowrap;
+			}
+			>div:after{
+				border-bottom:5px solid transparent;
+				border-right:5px solid white;
+				border-top:5px solid transparent;
+				content:'';
+				height:0;
+				opacity:0;
+				pointer-events:none;
+				position:absolute;
+				right:-10%;
+				top:50%;
+				transition:.25s;
+				translate:0 -50%;
+				white-space:nowrap;
+				width:0;
+			}
+			>.collapse{
+				>div{
+					rotate:180deg;
+					transition:.25s;
+				}
+			}
 		}
 	}
 	>.section:hover{
-		>.edit{
-			opacity:.25;
-		}
-		>.edit:hover{
+		>.section-actions{
 			opacity:1;
 		}
 	}
@@ -115,32 +131,48 @@ body{
 		padding:.5vmin 1vmin;
 		position:absolute;
 	}
-	>#summary{
-		display:flex;
-		gap:2vmin;
-		>div{
-			flex:1;
-		}
-		>#core{
-			display:flex;
-			flex-direction:column;
-			padding:11vmin 0 2vmin;
-			position:relative;
-			>#images{
-				aspect-ratio:1;
-				background:#ddd;
-				border-radius:2vmin;
-				bottom:100%;
-				left:50%;
-				position:absolute;
-				translate:-50%+50%;
-				width:18vmin;
+	>.section.closed{
+		margin-bottom:-7.75vmin;
+		>.section-actions{
+			>div:not(:first-child){
+				display:none;
 			}
-			>#name{
-				font-size:3.5vmin;
-				margin:auto;
-				text-wrap-mode:nowrap;
-				user-select:text;
+			>.collapse{
+				>div{
+					rotate:90deg;
+				}
+			}
+		}
+		>.content{
+			height:5vmin!important;
+		}
+	}
+	>#summary{
+		position:relative;
+		>.content{
+			>div{
+				flex:1;
+			}
+			>#core{
+				display:flex;
+				flex-direction:column;
+				padding:9vmin 0 2vmin;
+				>#images{
+					aspect-ratio:1;
+					background:#ddd;
+					border-radius:2vmin;
+					bottom:100%;
+					left:50%;
+					position:absolute;
+					translate:-50%+50%;
+					width:18vmin;
+				}
+				>#name{
+					font-size:3.5vmin;
+					margin:auto;
+					text-wrap-mode:nowrap;
+					user-select:text;
+				}
 			}
 		}
 	}
