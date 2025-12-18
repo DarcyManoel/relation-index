@@ -23,7 +23,7 @@ body{
 	font-family:UbuntuSans;
 	font-size:1.75vmin;
 	gap:4vmin;
-	margin:30vmin 5vmin 0;
+	margin:20vmin 5vmin 0;
 	user-select:none;
 	>.section{
 		background:white;
