@@ -1,36 +1,36 @@
+<!DOCTYPE html>
 <html>
 	<head>
-		<link rel="icon"href="assets/icon.svg">
-		<link rel="stylesheet"type="text/css"href="styles.css">
+		<link rel="icon"href="icon.svg">
 		<title>Relation Index</title>
+
+		<link rel="stylesheet"type="text/css"href="styles.css">
 	</head>
-	<body spellcheck="false">
-		<div id="Summary" class="section">
-			<div class="section-actions">
-				<div class="collapse" tooltip="Collapse Section" onclick="this.parentElement.parentElement.classList.toggle(`closed`);"><div>&#10699;</div></div>
+	<body>
+		<div id="toolbar">
+			<!-- left align -->
+			<div></div>
+			<!-- center align -->
+			<div>
+				<div id="add" onclick="addPerson()"></div>
+				<input id="search" type="text" placeholder="Search...">
 			</div>
-			<div class="content">
-				<div></div>
-				<div id="core">
-					<div id="images"></div>
-					<div id="name"></div>
+			<!-- right align -->
+			<div></div>
+		</div>
+		<div id="profile">
+			<div id="name"></div>
+		</div>
+		<dialog id="renameDialog">
+			<form onsubmit="saveName(event)">
+				<input id="renameFirstName" type="text" placeholder="First name" autocomplete="off">
+				<input id="renameLastName" type="text" placeholder="Last name" autocomplete="off">
+				<div class="buttons">
+					<button type="button" onclick="closeRename()">Cancel</button>
+					<button type="submit">Save</button>
 				</div>
-				<div></div>
-			</div>
-		</div>
-		<div id="Relations" class="section">
-			<div class="section-actions">
-				<div class="collapse" tooltip="Collapse Section" onclick="this.parentElement.parentElement.classList.toggle(`closed`);"><div>&#10699;</div></div>
-				<div class="edit" tooltip="Edit Relations" onclick="editRelations(0)">&#9998;</div>
-			</div>
-			<div class="content"></div>
-		</div>
-		<!---->
-		<div id="modal-container" class="hidden-modal" style="opacity:0;pointer-events:none;">
-			<div id="modal"></div>
-		</div>
-		<!---->
+			</form>
+		</dialog>
 	</body>
 	<script type="text/javascript"src="scripts.js"></script>
-	<script type="text/javascript"src="index.js"></script>
 </html>
