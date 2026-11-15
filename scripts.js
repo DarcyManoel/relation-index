@@ -18,24 +18,18 @@ function escapeHtml(text) {
 		.replaceAll(`"`, `&quot;`)
 }
 
+// Adding a person opens the name dialog first and the person only exists once a name is saved, so saving with no name entered, cancelling and closing the dialog all leave nothing behind
 function addPerson() {
-	let ids = Object.keys(persons).map(Number)
-	let newId = ids.length > 0 ? Math.max(...ids) + 1 : 1
+	isCreatingPerson = true
 
-	persons[ newId ] = {
-		firstName : `First`,
-		lastName : `Last`
-	}
-
-	viewPerson(newId)
-	console.log(persons, activeHistory)
+	openNameDialog(`New person`, getNameDraft(null))
 }
 
 // The window prompt is a confirm so nothing is removed unless OK is pressed, then every visit to that person is taken out of the history so viewPerson falls back to the person viewed before them
 function deletePerson() {
 	let id = activeHistory.at(-1)
 
-	if(!persons[id] || !window.confirm(`Delete ${persons[id].firstName} ${persons[id].lastName}?`)){
+	if(!persons[id] || !window.confirm(`Delete ${getNameLabel(persons[id])}?`)){
 		return
 	}
 
@@ -67,7 +61,7 @@ function viewPerson(id = activeHistory.at(-1)) {
 	saveData()
 	updateRecentMenu()
 
-	document.getElementById(`name`).innerHTML = `<span class="rename" onclick="renamePerson()">${escapeHtml(person.firstName)} ${escapeHtml(person.lastName)}</span> <sup class="delete" onclick="deletePerson()">delete</sup>`
+	document.getElementById(`name`).innerHTML = `<span class="rename" onclick="editName()">${escapeHtml(getNameLabel(person))}</span> <sup class="delete" onclick="deletePerson()">delete</sup>`
 
 	document.getElementById(`lifespan`).innerHTML = buildLifespanHtml(person)
 }
@@ -80,7 +74,7 @@ function updateRecentMenu() {
 		.slice(0, 10)
 
 	document.getElementById(`recent`).innerHTML = recentIds
-		.map((id) => `<div class="person" onclick="viewPerson(${id})">${escapeHtml(persons[id].firstName)} ${escapeHtml(persons[id].lastName)}</div>`)
+		.map((id) => `<div class="person" onclick="viewPerson(${id})">${escapeHtml(getNameLabel(persons[id]))}</div>`)
 		.join(``)
 }
 
@@ -95,42 +89,6 @@ function goBack() {
 
 	activeHistory = activeHistory.slice(0, previousIndex + 1)
 
-	viewPerson()
-}
-
-// The dialog opens with the active person's current names already in the boxes so nothing has to be retyped
-function renamePerson() {
-	let person = persons[activeHistory.at(-1)]
-
-	if(!person){
-		return
-	}
-
-	document.getElementById(`renameFirstName`).value = person.firstName
-	document.getElementById(`renameLastName`).value = person.lastName
-	document.getElementById(`renameDialog`).showModal()
-}
-
-function closeRename() {
-	document.getElementById(`renameDialog`).close()
-}
-
-// Either name can be left empty but not both, in that case the dialog stays open and nothing changes, and viewPerson is called afterwards so the nameplate is redrawn and everything is saved
-function saveName(event) {
-	event.preventDefault()
-
-	let person = persons[activeHistory.at(-1)]
-	let firstName = document.getElementById(`renameFirstName`).value.trim()
-	let lastName = document.getElementById(`renameLastName`).value.trim()
-
-	if(!person || (firstName == `` && lastName == ``)){
-		return
-	}
-
-	person.firstName = firstName
-	person.lastName = lastName
-
-	closeRename()
 	viewPerson()
 }
 
@@ -796,6 +754,316 @@ function saveDate(event) {
 	viewPerson()
 }
 
-// Dates saved in the old single form are turned into lists, the source order choices are filled in, and the person on screen before the refresh is shown again, nothing is shown when the history is empty
+// A name is a list of entered names because sources disagree, each entry is { firstName, lastName, order, link, note } with null for every part that is not entered, preferredVariantIndex is the starred entry that is used everywhere the person is named, and every person has at least one entry
+let nameDraft = {
+	variants : [],
+	preferredVariantIndex : 0,
+	selectedIndex : 0
+}
+let isCreatingPerson = false
+
+function getBlankName() {
+	return {
+		firstName : null,
+		lastName : null,
+		order : null,
+		link : null,
+		note : null
+	}
+}
+
+function isNameEmpty(name) {
+	return name.firstName == null && name.lastName == null
+}
+
+function formatNameText(name) {
+	return [name.firstName, name.lastName].filter((part) => part != null).join(` `)
+}
+
+// The entry that the person is named by, which is the starred one
+function getPreferredName(person) {
+	let field = person.names
+
+	return field?.variants[field.preferredVariantIndex] ?? field?.variants[0] ?? getBlankName()
+}
+
+// The name as it is written on the page, in the recent menu and in the delete question, a person with no name text at all is called Unnamed so there is still something to click
+function getNameLabel(person) {
+	return formatNameText(getPreferredName(person)) || `Unnamed`
+}
+
+// Names saved before they could have sources were a first and a last name on the person, they become a list of one entry with no source order
+function migrateNames(person) {
+	if(person.names){
+		return
+	}
+
+	person.names = {
+		preferredVariantIndex : 0,
+		variants : [
+			{
+				firstName : person.firstName || null,
+				lastName : person.lastName || null,
+				order : null,
+				link : null,
+				note : null
+			}
+		]
+	}
+
+	delete person.firstName
+	delete person.lastName
+}
+
+// A copy of the list for the dialog to work on, with one blank entry when there is nothing yet, and the selection on the starred entry
+function getNameDraft(field) {
+	let variants = (field?.variants ?? []).map((name) => ({ ...name }))
+	let preferredVariantIndex = field?.preferredVariantIndex ?? 0
+
+	if(variants.length == 0){
+		variants.push(getBlankName())
+	}
+
+	return {
+		variants : variants,
+		preferredVariantIndex : preferredVariantIndex,
+		selectedIndex : Math.min(preferredVariantIndex, variants.length - 1)
+	}
+}
+
+function readNameForm() {
+	return {
+		firstName : document.getElementById(`nameFirst`).value.trim(),
+		lastName : document.getElementById(`nameLast`).value.trim(),
+		order : document.getElementById(`nameOrder`).value,
+		link : document.getElementById(`nameLink`).value.trim(),
+		note : document.getElementById(`nameNote`).value.trim()
+	}
+}
+
+function clearNameIssue() {
+	document.getElementById(`nameIssue`).textContent = ``
+}
+
+function showNameIssue(issue) {
+	document.getElementById(`nameIssue`).textContent = `\u26a0 ${issue}`
+}
+
+// The orders are a row of small buttons and the meaning of the chosen one is written underneath, the same as in the date dialog, the chosen one is kept in a hidden box
+function renderNameOrderChoices() {
+	let chosenSourceOrder = getSourceOrder(Number(document.getElementById(`nameOrder`).value))
+
+	document.getElementById(`nameOrderChoices`).innerHTML = sourceOrders
+		.map((sourceOrder) => `<div class="choice${sourceOrder.order === chosenSourceOrder?.order ? ` selected` : ``}" onclick="chooseNameOrder(${sourceOrder.order})">${sourceOrder.label}</div>`)
+		.join(``)
+
+	document.getElementById(`nameOrderDescription`).textContent = chosenSourceOrder ? `${chosenSourceOrder.name} \u00b7 ${chosenSourceOrder.description}` : `Choose how close this source is to the person.`
+}
+
+// Choosing the order that is already chosen clears it again
+function chooseNameOrder(order) {
+	let orderInput = document.getElementById(`nameOrder`)
+
+	orderInput.value = orderInput.value == `${order}` ? `` : order
+
+	updateNameDialog()
+}
+
+// The boxes always show the selected entry, an empty entry is allowed while editing and is dropped when the dialog is saved
+function fillNameForm(name) {
+	document.getElementById(`nameFirst`).value = name?.firstName ?? ``
+	document.getElementById(`nameLast`).value = name?.lastName ?? ``
+	document.getElementById(`nameOrder`).value = name?.order ?? ``
+	document.getElementById(`nameLink`).value = name?.link ?? ``
+	document.getElementById(`nameNote`).value = name?.note ?? ``
+
+	clearNameIssue()
+	renderNameOrderChoices()
+}
+
+// Writes the boxes into the selected entry, a name has no way to be impossible so this always works
+function syncNameDraftFromForm() {
+	let form = readNameForm()
+
+	nameDraft.variants[nameDraft.selectedIndex] = {
+		firstName : form.firstName == `` ? null : form.firstName,
+		lastName : form.lastName == `` ? null : form.lastName,
+		order : form.order == `` ? null : Number(form.order),
+		link : form.link == `` ? null : form.link,
+		note : form.note == `` ? null : form.note
+	}
+}
+
+// The optional note and link go on a second line of the entry, a link is only clickable when it is a web address, and clicking it must not also select the entry
+function buildNameEntryHtml(name, index) {
+	let sourceOrder = getSourceOrder(name.order)
+	let isEmpty = isNameEmpty(name)
+	let extraParts = []
+
+	if(name.note){
+		extraParts.push(escapeHtml(name.note))
+	}
+
+	if(name.link){
+		extraParts.push(isWebAddress(name.link)
+			? `<a href="${escapeHtml(name.link)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${escapeHtml(getLinkLabel(name.link))}</a>`
+			: escapeHtml(name.link))
+	}
+
+	return `<div class="entry${index == nameDraft.selectedIndex ? ` selected` : ``}${isEmpty ? ` blank` : ``}" onclick="selectNameEntry(${index})"><span class="star" onclick="starNameEntry(event, ${index})">${index == nameDraft.preferredVariantIndex ? `\u2605` : `\u2606`}</span><span class="text">${isEmpty ? `New name` : escapeHtml(formatNameText(name))}</span><span class="meta">${sourceOrder ? `${sourceOrder.name} \u00b7 ${sourceOrder.label}` : `Source not set`}</span><span class="remove" onclick="removeNameEntry(event, ${index})">remove</span>${extraParts.length > 0 ? `<span class="extra">${extraParts.join(` \u00b7 `)}</span>` : ``}</div>`
+}
+
+// The list of entered names is only shown once there is something to list, the star marks the entry the person is named by
+function renderNameList() {
+	let isOnlyBlank = nameDraft.variants.length == 1 && isNameEmpty(nameDraft.variants[0])
+
+	document.getElementById(`nameList`).innerHTML = isOnlyBlank ? `` : `<div class="heading"><span>Entered names</span><span class="action" onclick="addAnotherName()">+ add another</span></div>${nameDraft.variants.map(buildNameEntryHtml).join(``)}`
+}
+
+// The dialog works on a copy of the list so Cancel throws every change away, the same dialog serves a person who exists and a person who is being added
+function openNameDialog(title, draft) {
+	nameDraft = draft
+
+	document.getElementById(`nameTitle`).textContent = title
+
+	fillNameForm(nameDraft.variants[nameDraft.selectedIndex])
+	renderNameList()
+
+	document.getElementById(`nameDialog`).showModal()
+}
+
+function editName() {
+	let person = persons[activeHistory.at(-1)]
+
+	if(!person){
+		return
+	}
+
+	isCreatingPerson = false
+
+	openNameDialog(`Name`, getNameDraft(person.names))
+}
+
+function closeName() {
+	document.getElementById(`nameDialog`).close()
+}
+
+// Every keystroke keeps the selected entry and the list up to date
+function updateNameDialog() {
+	clearNameIssue()
+	syncNameDraftFromForm()
+	renderNameOrderChoices()
+	renderNameList()
+}
+
+function selectNameEntry(index) {
+	syncNameDraftFromForm()
+
+	nameDraft.selectedIndex = index
+
+	fillNameForm(nameDraft.variants[index])
+	renderNameList()
+}
+
+// A new blank entry is added and selected, unless the selected entry is already blank
+function addAnotherName() {
+	syncNameDraftFromForm()
+
+	if(!isNameEmpty(nameDraft.variants[nameDraft.selectedIndex])){
+		nameDraft.variants.push(getBlankName())
+		nameDraft.selectedIndex = nameDraft.variants.length - 1
+	}
+
+	fillNameForm(nameDraft.variants[nameDraft.selectedIndex])
+	renderNameList()
+}
+
+// The star is inside a row that selects itself when clicked, so the click is stopped from reaching the row
+function starNameEntry(event, index) {
+	event.stopPropagation()
+
+	nameDraft.preferredVariantIndex = index
+
+	renderNameList()
+}
+
+// Takes one entry out of the copy being edited, the star and the selection follow their entries when the ones before them move up, the star falls back to the first entry when its own entry is removed, and removing the last entry leaves one blank entry
+function removeNameEntry(event, index) {
+	event.stopPropagation()
+	syncNameDraftFromForm()
+
+	nameDraft.variants.splice(index, 1)
+
+	if(nameDraft.variants.length == 0){
+		nameDraft.variants.push(getBlankName())
+	}
+
+	if(nameDraft.preferredVariantIndex == index){
+		nameDraft.preferredVariantIndex = 0
+	} else if(nameDraft.preferredVariantIndex > index){
+		nameDraft.preferredVariantIndex -= 1
+	}
+
+	if(nameDraft.selectedIndex > index){
+		nameDraft.selectedIndex -= 1
+	}
+
+	nameDraft.selectedIndex = Math.min(nameDraft.selectedIndex, nameDraft.variants.length - 1)
+
+	fillNameForm(nameDraft.variants[nameDraft.selectedIndex])
+	renderNameList()
+}
+
+// The empty entries are dropped, the star follows its entry and falls back to the first when its entry was dropped, a person who exists has to keep a name so the dialog stays open and says so, while a person who is being added and has no name entered is simply not created
+function saveName(event) {
+	event.preventDefault()
+	syncNameDraftFromForm()
+
+	let keptIndexes = nameDraft.variants
+		.map((name, index) => index)
+		.filter((index) => !isNameEmpty(nameDraft.variants[index]))
+
+	if(keptIndexes.length == 0){
+		if(isCreatingPerson){
+			closeName()
+		} else {
+			showNameIssue(`A person needs a name`)
+		}
+
+		return
+	}
+
+	let names = {
+		preferredVariantIndex : Math.max(keptIndexes.indexOf(nameDraft.preferredVariantIndex), 0),
+		variants : keptIndexes.map((index) => nameDraft.variants[index])
+	}
+
+	if(isCreatingPerson){
+		let ids = Object.keys(persons).map(Number)
+		let newId = ids.length > 0 ? Math.max(...ids) + 1 : 1
+
+		persons[ newId ] = {
+			names : names
+		}
+
+		closeName()
+		viewPerson(newId)
+		console.log(persons, activeHistory)
+
+		return
+	}
+
+	let person = persons[activeHistory.at(-1)]
+
+	if(person){
+		person.names = names
+	}
+
+	closeName()
+	viewPerson()
+}
+
+// Dates and names saved in their old forms are turned into lists, and the person on screen before the refresh is shown again, nothing is shown when the history is empty
 Object.values(persons).forEach(migrateDates)
+Object.values(persons).forEach(migrateNames)
 viewPerson()

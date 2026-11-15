@@ -304,7 +304,8 @@ body{
 		padding: 1em;
 		scale: .95;
 		transition: display .25s allow-discrete, overlay .25s allow-discrete, opacity .25s, scale .25s;
-		&#dateDialog{
+		&#dateDialog,
+		&#nameDialog{
 			width: min(24em, calc(100vw - 2em));
 		}
 		&[open]{
@@ -331,6 +332,9 @@ body{
 			display: flex;
 			flex-direction: column;
 			gap: .5em;
+			>.title{
+				font-weight: bold;
+			}
 			>.tabs{
 				display: flex;
 				gap: .25em;
@@ -489,13 +493,18 @@ body{
 					}
 				}
 			}
-			>.dateInputs{
+			>.dateInputs,
+			>.nameInputs{
 				display: flex;
 				gap: .5em;
 				>label{
 					display: flex;
 					flex-direction: column;
 					gap: .25em;
+					&.first,
+					&.last{
+						flex: 1;
+					}
 					&.day,
 					&.month{
 						width: 4.5em;

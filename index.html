@@ -25,12 +25,23 @@
 			<div id="name"></div>
 			<div id="lifespan"></div>
 		</div>
-		<dialog id="renameDialog">
-			<form onsubmit="saveName(event)">
-				<input id="renameFirstName" type="text" placeholder="First name" autocomplete="off">
-				<input id="renameLastName" type="text" placeholder="Last name" autocomplete="off">
+		<dialog id="nameDialog">
+			<form onsubmit="saveName(event)" oninput="updateNameDialog()">
+				<div class="title" id="nameTitle"></div>
+				<div class="nameInputs">
+					<label class="first"><span class="name">First name</span><input id="nameFirst" type="text" autocomplete="off"></label>
+					<label class="last"><span class="name">Last name</span><input id="nameLast" type="text" autocomplete="off"></label>
+				</div>
+				<div class="heading">Source order</div>
+				<input id="nameOrder" type="hidden">
+				<div class="choices" id="nameOrderChoices"></div>
+				<div class="description" id="nameOrderDescription"></div>
+				<input id="nameLink" type="text" placeholder="Link (optional)" autocomplete="off" autocapitalize="off" spellcheck="false">
+				<input id="nameNote" type="text" placeholder="Note (optional)" autocomplete="off">
+				<div class="issue" id="nameIssue"></div>
+				<div class="list" id="nameList"></div>
 				<div class="buttons">
-					<button type="button" onclick="closeRename()">Cancel</button>
+					<button type="button" onclick="closeName()">Cancel</button>
 					<button type="submit">Save</button>
 				</div>
 			</form>
