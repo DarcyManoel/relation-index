@@ -247,16 +247,66 @@ body{
 				}
 			}
 		}
+		#lifespan{
+			align-items: baseline;
+			display: grid;
+			gap: .25em 0;
+			grid-template-columns: max-content auto;
+			margin-top: .5em;
+			width: fit-content;
+			>.date{
+				border-radius: .25em;
+				cursor: pointer;
+				display: flex;
+				grid-column: 1;
+				padding: 0 .25em;
+				white-space: nowrap;
+				&:hover{
+					background: rgba(200, 200, 200, .3);
+				}
+				>.label{
+					font-weight: bold;
+					margin-right: .25em;
+				}
+				>.detail{
+					padding-right: .25em;
+				}
+				>.empty{
+					color: grey;
+				}
+			}
+			>.age{
+				color: grey;
+				grid-column: 2;
+				margin-left: 1em;
+				&.current,
+				&.yearsAgo{
+					grid-row: 1;
+				}
+				&.atDeath{
+					grid-row: 2;
+				}
+				>.alert{
+					color: darkorange;
+					cursor: pointer;
+				}
+			}
+		}
 	}
-	#renameDialog{
+	dialog{
 		backdrop-filter: blur(16px) saturate(.75);
 		background: rgba(200, 200, 200, .6);
 		border: none;
 		border-radius: .75em;
+		max-height: calc(100dvh - 2em);
 		opacity: 0;
+		overflow-y: auto;
 		padding: 1em;
 		scale: .95;
 		transition: display .25s allow-discrete, overlay .25s allow-discrete, opacity .25s, scale .25s;
+		&#dateDialog{
+			width: min(24em, calc(100vw - 2em));
+		}
 		&[open]{
 			opacity: 1;
 			scale: 1;
@@ -281,7 +331,193 @@ body{
 			display: flex;
 			flex-direction: column;
 			gap: .5em;
-			>input{
+			>.tabs{
+				display: flex;
+				gap: .25em;
+				>button{
+					background: rgba(200, 200, 200, .3);
+					border: none;
+					border-radius: .75em;
+					cursor: pointer;
+					flex: 1;
+					font: inherit;
+					font-weight: bold;
+					padding: .5em 1em;
+					&:hover{
+						background: rgba(200, 200, 200, .5);
+						border-radius: 1em;
+					}
+					&.selected{
+						background: rgba(200, 200, 200, .5);
+						box-shadow: inset 0 0 0 .1em black;
+					}
+				}
+			}
+			>.issue{
+				font-size: .8em;
+				font-weight: bold;
+				&:empty{
+					display: none;
+				}
+			}
+			>.heading{
+				color: grey;
+				font-size: .8em;
+				letter-spacing: .1em;
+				text-transform: uppercase;
+				user-select: none;
+			}
+			>.choices{
+				display: flex;
+				flex-wrap: wrap;
+				gap: .25em;
+				>.choice{
+					background: rgba(200, 200, 200, .3);
+					border-radius: .75em;
+					cursor: pointer;
+					padding: .25em .75em;
+					user-select: none;
+					&:hover{
+						background: rgba(200, 200, 200, .5);
+						border-radius: 1em;
+					}
+					&.selected{
+						background: rgba(200, 200, 200, .5);
+						box-shadow: inset 0 0 0 .1em black;
+					}
+				}
+			}
+			>.description{
+				color: grey;
+				font-size: .8em;
+				min-height: 3.6em;
+			}
+			>.list{
+				display: flex;
+				flex-direction: column;
+				gap: .25em;
+				&:empty{
+					display: none;
+				}
+				>.heading{
+					align-items: baseline;
+					color: grey;
+					display: flex;
+					font-size: .8em;
+					justify-content: space-between;
+					letter-spacing: .1em;
+					text-transform: uppercase;
+					user-select: none;
+					>.action{
+						cursor: pointer;
+						&:hover{
+							color: black;
+						}
+					}
+				}
+				>.entry{
+					align-items: center;
+					border-radius: .5em;
+					column-gap: .5em;
+					cursor: pointer;
+					display: grid;
+					grid-template-columns: auto 1fr auto auto;
+					padding: .25em .5em;
+					&:hover{
+						background: rgba(200, 200, 200, .3);
+						>.remove{
+							opacity: 1;
+						}
+					}
+					&.selected{
+						background: rgba(200, 200, 200, .5);
+					}
+					&.blank{
+						color: grey;
+					}
+					>.star{
+						cursor: pointer;
+						user-select: none;
+					}
+					>.meta{
+						color: grey;
+						font-size: .8em;
+					}
+					>.remove{
+						color: grey;
+						font-size: .8em;
+						opacity: 0;
+						user-select: none;
+						@media (hover: none){
+							opacity: 1;
+						}
+						&:hover{
+							color: red;
+						}
+					}
+					>.extra{
+						color: grey;
+						font-size: .8em;
+						grid-column: 2 / -1;
+						overflow-wrap: anywhere;
+					}
+				}
+			}
+			>.checkbox{
+				align-items: center;
+				cursor: pointer;
+				display: flex;
+				gap: .5em;
+				&[hidden]{
+					display: none;
+				}
+				>input{
+					appearance: none;
+					background: rgba(200, 200, 200, .3);
+					border: .1em solid black;
+					border-radius: .2em;
+					cursor: pointer;
+					height: 1.2em;
+					padding: 0;
+					width: 1.2em;
+					&:checked{
+						background-image: linear-gradient(to top right, transparent calc(50% - .06em), black calc(50% - .06em), black calc(50% + .06em), transparent calc(50% + .06em)), linear-gradient(to bottom right, transparent calc(50% - .06em), black calc(50% - .06em), black calc(50% + .06em), transparent calc(50% + .06em));
+					}
+					&:disabled{
+						cursor: default;
+						opacity: .5;
+					}
+				}
+			}
+			>.dateInputs{
+				display: flex;
+				gap: .5em;
+				>label{
+					display: flex;
+					flex-direction: column;
+					gap: .25em;
+					&.day,
+					&.month{
+						width: 4.5em;
+					}
+					&.year{
+						width: 6em;
+					}
+					>.name{
+						color: grey;
+						font-size: .8em;
+						letter-spacing: .1em;
+						text-transform: uppercase;
+						user-select: none;
+					}
+					>input{
+						min-width: 0;
+						width: 100%;
+					}
+				}
+			}
+			input,
+			select{
 				background: rgba(200, 200, 200, .3);
 				border: none;
 				border-radius: .75em;

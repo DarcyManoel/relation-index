@@ -23,6 +23,7 @@
 		</div>
 		<div id="profile">
 			<div id="name"></div>
+			<div id="lifespan"></div>
 		</div>
 		<dialog id="renameDialog">
 			<form onsubmit="saveName(event)">
@@ -30,6 +31,32 @@
 				<input id="renameLastName" type="text" placeholder="Last name" autocomplete="off">
 				<div class="buttons">
 					<button type="button" onclick="closeRename()">Cancel</button>
+					<button type="submit">Save</button>
+				</div>
+			</form>
+		</dialog>
+		<dialog id="dateDialog">
+			<form onsubmit="saveDate(event)" oninput="updateDateDialog()">
+				<div class="tabs">
+					<button type="button" id="birthTab" onclick="switchDateKind(`birth`)">Birth</button>
+					<button type="button" id="deathTab" onclick="switchDateKind(`death`)">Death</button>
+				</div>
+				<div class="dateInputs">
+					<label class="day"><span class="name">Day</span><input id="dateDay" type="text" inputmode="numeric" maxlength="2" autocomplete="off"></label>
+					<label class="month"><span class="name">Month</span><input id="dateMonth" type="text" inputmode="numeric" maxlength="2" autocomplete="off"></label>
+					<label class="year"><span class="name">Year</span><input id="dateYear" type="text" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+				</div>
+				<div class="heading">Source order</div>
+				<input id="dateOrder" type="hidden">
+				<div class="choices" id="dateOrderChoices"></div>
+				<div class="description" id="dateOrderDescription"></div>
+				<input id="dateLink" type="text" placeholder="Link (optional)" autocomplete="off" autocapitalize="off" spellcheck="false">
+				<input id="dateNote" type="text" placeholder="Note (optional)" autocomplete="off">
+				<label class="checkbox" id="deceasedLabel"><input id="dateDeceased" type="checkbox">Deceased, date unknown</label>
+				<div class="issue" id="dateIssue"></div>
+				<div class="list" id="dateList"></div>
+				<div class="buttons">
+					<button type="button" onclick="closeDate()">Cancel</button>
 					<button type="submit">Save</button>
 				</div>
 			</form>
