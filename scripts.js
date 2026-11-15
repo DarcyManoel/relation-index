@@ -92,6 +92,126 @@ function goBack() {
 	viewPerson()
 }
 
+// The search box is split into words and a person matches when every word is found in one of their entered names, upper and lower case do not matter, so "smi jo" finds "John Smith" as well as "Smith Jonas"
+function getSearchTerms() {
+	return document.getElementById(`search`).value.toLowerCase().split(/\s+/).filter((term) => term != ``)
+}
+
+function isNameMatching(name, terms) {
+	let nameText = formatNameText(name).toLowerCase()
+
+	return terms.every((term) => nameText.includes(term))
+}
+
+// Every entered name is searched, not just the starred one, because a person may be remembered by a name that is not the one shown on their page, the starred name is the one listed when it matches, otherwise the first entry that does, and the list is sorted by that name
+function findPersonMatches(terms) {
+	let matches = []
+
+	for(let [id, person] of Object.entries(persons)){
+		let preferredName = getPreferredName(person)
+		let matchedName = [preferredName, ...(person.names?.variants ?? [])].find((name) => isNameMatching(name, terms))
+
+		if(!matchedName){
+			continue
+		}
+
+		matches.push({
+			id : id,
+			text : formatNameText(matchedName),
+			isPreferred : matchedName === preferredName,
+			label : getNameLabel(person)
+		})
+	}
+
+	return matches.sort((firstMatch, secondMatch) => firstMatch.text.localeCompare(secondMatch.text))
+}
+
+// Wraps every part of the text that matches a word in a mark, the places where the words are found are collected first and overlapping or touching ones are joined so the marks never nest, and every piece of text is escaped on its own
+function buildHighlightHtml(text, terms) {
+	let lowerText = text.toLowerCase()
+	let foundRanges = []
+
+	for(let term of terms){
+		let startIndex = lowerText.indexOf(term)
+
+		while(startIndex != -1){
+			foundRanges.push({
+				startIndex : startIndex,
+				endIndex : startIndex + term.length
+			})
+
+			startIndex = lowerText.indexOf(term, startIndex + term.length)
+		}
+	}
+
+	foundRanges.sort((firstRange, secondRange) => firstRange.startIndex - secondRange.startIndex)
+
+	let joinedRanges = []
+
+	for(let range of foundRanges){
+		let lastRange = joinedRanges.at(-1)
+
+		if(lastRange && range.startIndex <= lastRange.endIndex){
+			lastRange.endIndex = Math.max(lastRange.endIndex, range.endIndex)
+		} else {
+			joinedRanges.push({ ...range })
+		}
+	}
+
+	let html = ``
+	let position = 0
+
+	for(let range of joinedRanges){
+		html += `${escapeHtml(text.slice(position, range.startIndex))}<mark>${escapeHtml(text.slice(range.startIndex, range.endIndex))}</mark>`
+		position = range.endIndex
+	}
+
+	return `${html}${escapeHtml(text.slice(position))}`
+}
+
+// The fine text says what kind of thing the result is, only people can be found for now, and when the name that matched is not the starred one the name the page shows is added so the result is not a surprise
+function buildSearchResultHtml(match, terms) {
+	return `<div class="result" onclick="openSearchResult(${match.id})"><div class="text">${buildHighlightHtml(match.text, terms)}</div><div class="kind">Person${match.isPreferred ? `` : ` \u00b7 shown as ${escapeHtml(match.label)}`}</div></div>`
+}
+
+// Runs on every keystroke and when the box is focused again, an empty box lists nothing
+function updateSearch() {
+	let terms = getSearchTerms()
+	let resultsElement = document.getElementById(`results`)
+
+	if(terms.length == 0){
+		resultsElement.innerHTML = ``
+
+		return
+	}
+
+	let matches = findPersonMatches(terms)
+
+	resultsElement.innerHTML = matches.length == 0 ? `<div class="none">No people found</div>` : matches.map((match) => buildSearchResultHtml(match, terms)).join(``)
+}
+
+function closeSearch() {
+	document.getElementById(`search`).value = ``
+
+	updateSearch()
+
+	document.getElementById(`search`).blur()
+}
+
+function openSearchResult(id) {
+	viewPerson(id)
+	closeSearch()
+}
+
+// Enter opens the first result and Escape gives up the search
+function handleSearchKey(event) {
+	if(event.key == `Escape`){
+		closeSearch()
+	} else if(event.key == `Enter`){
+		document.querySelector(`#results>.result`)?.click()
+	}
+}
+
 // A birth or a death is a list of entered dates because sources disagree, each entry is { year, month, day, order, link, note } with null for every part that is not known, order saying how close the source is and link and note being optional, preferredVariantIndex is the starred entry that the person's page shows, and a person with no entered dates has no such property at all
 let monthNames = [`Jan`, `Feb`, `Mar`, `Apr`, `May`, `Jun`, `Jul`, `Aug`, `Sep`, `Oct`, `Nov`, `Dec`]
 let editedDateKind = `birth`

@@ -16,7 +16,10 @@
 			<!-- center align -->
 			<div>
 				<div id="add" onclick="addPerson()"><div class="pill"><span class="label">add</span><span class="icon"></span></div></div>
-				<input id="search" type="text" placeholder="Search...">
+				<div id="searchBox">
+					<input id="search" type="text" placeholder="Search..." autocomplete="off" oninput="updateSearch()" onfocus="updateSearch()" onkeydown="handleSearchKey(event)">
+					<div id="results" onmousedown="event.preventDefault()"></div>
+				</div>
 			</div>
 			<!-- right align -->
 			<div></div>
