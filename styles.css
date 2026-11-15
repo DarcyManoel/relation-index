@@ -31,46 +31,185 @@ body{
 			display: flex;
 			gap: .5em;
 			>div{
-				backdrop-filter: blur(2px) saturate(.75);
+				backdrop-filter: blur(12px) saturate(.75);
 				background: rgba(200, 200, 200, .3);
 				border-radius: .75em;
 				cursor: pointer;
 				padding: .5em;
 			}
 		}
+		.icon{
+			aspect-ratio: 1;
+			height: 100%;
+			position: relative;
+			&:before,
+			&:after{
+				background: grey;
+				border-radius: 1em;
+				content: '';
+				height: 10%;
+				left: 50%;
+				position: absolute;
+				top: 50%;
+				translate: -50% -50%;
+			}
+		}
+		#back{
+			aspect-ratio: 1;
+			backdrop-filter: none;
+			background: none;
+			padding: 0;
+			position: relative;
+			user-select: none;
+			>.pill{
+				backdrop-filter: blur(12px) saturate(.75);
+				background: rgba(200, 200, 200, .3);
+				border-radius: .75em;
+				display: flex;
+				height: 100%;
+				left: 0;
+				position: absolute;
+				top: 0;
+				>.icon{
+					&:before,
+					&:after{
+						width: 50%;
+					}
+					&:before{
+						rotate: -45deg;
+						top: calc(50% - 17.7%);
+					}
+					&:after{
+						rotate: 45deg;
+						top: calc(50% + 17.7%);
+					}
+				}
+				>.label{
+					align-items: center;
+					display: flex;
+					opacity: 0;
+					overflow: hidden;
+					white-space: nowrap;
+					width: 0;
+				}
+			}
+			&:hover{
+				>.pill{
+					backdrop-filter: blur(16px) saturate(.5);
+					background: rgba(200, 200, 200, .5);
+					border-radius: 1em;
+					>.label{
+						opacity: 1;
+						padding-right: .75em;
+						width: auto;
+					}
+				}
+				+ #recent{
+					opacity: 1;
+					transition-delay: .75s;
+					translate: 0 0;
+					visibility: visible;
+				}
+			}
+		}
+		#recent{
+			cursor: default;
+			left: 0;
+			max-width: 20em;
+			opacity: 0;
+			padding: .25em;
+			position: absolute;
+			top: calc(100% + .5em);
+			transition: opacity .25s, translate .25s, visibility .25s;
+			translate: 0 -.5em;
+			visibility: hidden;
+			width: max-content;
+			&:empty{
+				display: none;
+			}
+			&:hover{
+				opacity: 1;
+				translate: 0 0;
+				visibility: visible;
+			}
+			&:before{
+				content: '';
+				height: .5em;
+				left: 0;
+				position: absolute;
+				right: 0;
+				top: -.5em;
+			}
+			>.person{
+				border-radius: .5em;
+				cursor: pointer;
+				overflow: hidden;
+				padding: .25em .5em;
+				text-overflow: ellipsis;
+				white-space: nowrap;
+				&:hover{
+					background: rgba(200, 200, 200, .5);
+					border-radius: 1em;
+				}
+			}
+		}
 		#add{
 			aspect-ratio: 1;
-		}
-		#add:hover{
-			backdrop-filter: blur(3px) saturate(.5);
-			background: rgba(200, 200, 200, .5);
-			border-radius: 1em;
-		}
-		#add:before,
-		#add:after{
-			background: grey;
-			border-radius: 50%;
-			content: '';
-			height: 10%;
-			position: absolute;
-			width: 70%;
-			left: 50%;
-			top: 50%;
-			translate: -50% -50%;
-		}
-		#add:before{
-			rotate: 90deg;
+			backdrop-filter: none;
+			background: none;
+			padding: 0;
+			position: relative;
+			>.pill{
+				backdrop-filter: blur(12px) saturate(.75);
+				background: rgba(200, 200, 200, .3);
+				border-radius: .75em;
+				display: flex;
+				height: 100%;
+				position: absolute;
+				right: 0;
+				top: 0;
+				user-select: none;
+				>.label{
+					align-items: center;
+					display: flex;
+					opacity: 0;
+					overflow: hidden;
+					white-space: nowrap;
+					width: 0;
+				}
+				>.icon{
+					&:before,
+					&:after{
+						width: 70%;
+					}
+					&:before{
+						rotate: 90deg;
+					}
+				}
+			}
+			&:hover{
+				>.pill{
+					backdrop-filter: blur(16px) saturate(.5);
+					background: rgba(200, 200, 200, .5);
+					border-radius: 1em;
+					>.label{
+						opacity: 1;
+						padding-left: .75em;
+						width: auto;
+					}
+				}
+			}
 		}
 		#search{
-			backdrop-filter: blur(2px) saturate(.75);
+			backdrop-filter: blur(12px) saturate(.75);
 			background: rgba(200, 200, 200, .3);
-			border-radius: .75em;
 			border: none;
+			border-radius: .75em;
 			padding: .5em 1em;
 			width: 20em;
 		}
 		#search:focus{
-			backdrop-filter: blur(3px) saturate(.5);
+			backdrop-filter: blur(16px) saturate(.5);
 			background: rgba(200, 200, 200, .5);
 			border-radius: 1em;
 			width: 30em;
@@ -110,7 +249,7 @@ body{
 		}
 	}
 	#renameDialog{
-		backdrop-filter: blur(6px) saturate(.75);
+		backdrop-filter: blur(16px) saturate(.75);
 		background: rgba(200, 200, 200, .6);
 		border: none;
 		border-radius: .75em;
@@ -127,7 +266,7 @@ body{
 			}
 		}
 		&::backdrop{
-			backdrop-filter: blur(2px);
+			backdrop-filter: blur(8px);
 			background: rgba(200, 200, 200, .3);
 			opacity: 0;
 			transition: display .25s allow-discrete, overlay .25s allow-discrete, opacity .25s;

@@ -9,10 +9,13 @@
 	<body>
 		<div id="toolbar">
 			<!-- left align -->
-			<div></div>
+			<div>
+				<div id="back" onclick="goBack()"><div class="pill"><span class="icon"></span><span class="label">back</span></div></div>
+				<div id="recent"></div>
+			</div>
 			<!-- center align -->
 			<div>
-				<div id="add" onclick="addPerson()"></div>
+				<div id="add" onclick="addPerson()"><div class="pill"><span class="label">add</span><span class="icon"></span></div></div>
 				<input id="search" type="text" placeholder="Search...">
 			</div>
 			<!-- right align -->

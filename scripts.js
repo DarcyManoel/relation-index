@@ -53,6 +53,7 @@ function viewPerson(id = activeHistory.at(-1)) {
 
 	if(!person){
 		document.getElementById(`name`).innerHTML = ``
+		updateRecentMenu()
 		saveData()
 
 		return
@@ -63,8 +64,35 @@ function viewPerson(id = activeHistory.at(-1)) {
 	}
 
 	saveData()
+	updateRecentMenu()
 
 	document.getElementById(`name`).innerHTML = `<span class="rename" title="Rename" onclick="renamePerson()">${escapeHtml(person.firstName)} ${escapeHtml(person.lastName)}</span> <sup class="delete" title="Delete" onclick="deletePerson()">delete</sup>`
+}
+
+// The menu lists the 10 most recent people other than the one on screen, newest first, each person only once
+function updateRecentMenu() {
+	let currentId = activeHistory.at(-1)
+	let recentIds = [...new Set([...activeHistory].reverse())]
+		.filter((id) => id !== currentId && persons[id])
+		.slice(0, 10)
+
+	document.getElementById(`recent`).innerHTML = recentIds
+		.map((id) => `<div class="person" onclick="viewPerson(${id})">${escapeHtml(persons[id].firstName)} ${escapeHtml(persons[id].lastName)}</div>`)
+		.join(``)
+}
+
+// Going back drops the person on screen, and any repeats of them at the end of the history, so the person viewed before is shown, and nothing happens when there is nobody earlier
+function goBack() {
+	let currentId = activeHistory.at(-1)
+	let previousIndex = activeHistory.findLastIndex((historyId) => historyId !== currentId)
+
+	if(previousIndex == -1){
+		return
+	}
+
+	activeHistory = activeHistory.slice(0, previousIndex + 1)
+
+	viewPerson()
 }
 
 // The dialog opens with the active person's current names already in the boxes so nothing has to be retyped
