@@ -3,9 +3,13 @@ let persons = JSON.parse(localStorage.getItem(`persons`)) || {}
 // The history is the list of viewed people with the active person last, it is saved as well so a refresh brings back the same person and deleting still falls back to the one viewed before, ids of people that no longer exist are dropped when it is loaded
 let activeHistory = (JSON.parse(localStorage.getItem(`activeHistory`)) || []).filter((id) => persons[id])
 
+// The details of every image, keyed by image id, each is { widthPx, heightPx, date, note, people }, date is null or { day, month, year } with null for unknown parts, note is null or text, and people lists everyone in the image as { personId } for someone in the database or { text } for someone written in plain text, an image is shown in the gallery of every person it lists, the pixels are not here, they are in IndexedDB
+let images = JSON.parse(localStorage.getItem(`images`)) || {}
+
 // Everything that has to survive a refresh is written here
 function saveData() {
 	localStorage.setItem(`persons`, JSON.stringify(persons))
+	localStorage.setItem(`images`, JSON.stringify(images))
 	localStorage.setItem(`activeHistory`, JSON.stringify(activeHistory))
 }
 
@@ -33,6 +37,11 @@ function deletePerson() {
 		return
 	}
 
+	unlinkPersonFromImages(id)
+
+	// A failed delete of the thumbnail only leaves a small file behind, so it is not worth stopping for
+	deleteThumbnailBlob(id).catch(() => {})
+
 	delete persons[id]
 	activeHistory = activeHistory.filter((historyId) => historyId != id)
 
@@ -46,6 +55,11 @@ function viewPerson(id = activeHistory.at(-1)) {
 	let person = persons[id]
 
 	if(!person){
+		document.getElementById(`header`).hidden = true
+
+		clearPhoto()
+		clearGallery()
+
 		document.getElementById(`name`).innerHTML = ``
 		document.getElementById(`lifespan`).innerHTML = ``
 		updateRecentMenu()
@@ -64,6 +78,10 @@ function viewPerson(id = activeHistory.at(-1)) {
 	document.getElementById(`name`).innerHTML = `<span class="rename" onclick="editName()">${escapeHtml(getNameLabel(person))}</span> <sup class="delete" onclick="deletePerson()">delete</sup>`
 
 	document.getElementById(`lifespan`).innerHTML = buildLifespanHtml(person)
+	document.getElementById(`header`).hidden = false
+
+	renderPhoto(id)
+	renderGallery(id)
 }
 
 // The menu lists the 10 most recent people other than the one on screen, newest first, each person only once
@@ -93,8 +111,12 @@ function goBack() {
 }
 
 // The search box is split into words and a person matches when every word is found in one of their entered names, upper and lower case do not matter, so "smi jo" finds "John Smith" as well as "Smith Jonas"
+function splitSearchTerms(text) {
+	return text.toLowerCase().split(/\s+/).filter((term) => term != ``)
+}
+
 function getSearchTerms() {
-	return document.getElementById(`search`).value.toLowerCase().split(/\s+/).filter((term) => term != ``)
+	return splitSearchTerms(document.getElementById(`search`).value)
 }
 
 function isNameMatching(name, terms) {
@@ -174,10 +196,209 @@ function buildSearchResultHtml(match, terms) {
 	return `<div class="result" onclick="openSearchResult(${match.id})"><div class="text">${buildHighlightHtml(match.text, terms)}</div><div class="kind">Person${match.isPreferred ? `` : ` \u00b7 shown as ${escapeHtml(match.label)}`}</div></div>`
 }
 
-// Runs on every keystroke and when the box is focused again, an empty box lists nothing
+// A word of the search can be a date in several shapes and the parts of the image's date that it hits are returned so they can be highlighted, a date written with / . or - is read as day month year, or year month day when it starts with 4 digits, or month and year, or day and month, and every part that is written has to equal the same part of the image's date, a 4 digit number is a year, a 1 or 2 digit number is a day or a month, 14th is a day, and a month name or its start from 3 letters such as mar or march is a month
+function getDateTermParts(term, date) {
+	if(!date){
+		return []
+	}
+
+	if(/^\d+([/.-]\d+){1,2}$/.test(term)){
+		let numbers = term.split(/[/.-]/)
+		let pairs
+
+		if(numbers.length == 3){
+			pairs = numbers[0].length == 4 ? [[`year`, numbers[0]], [`month`, numbers[1]], [`day`, numbers[2]]] : [[`day`, numbers[0]], [`month`, numbers[1]], [`year`, numbers[2]]]
+		} else if(numbers[0].length == 4){
+			pairs = [[`year`, numbers[0]], [`month`, numbers[1]]]
+		} else if(numbers[1].length == 4){
+			pairs = [[`month`, numbers[0]], [`year`, numbers[1]]]
+		} else {
+			pairs = [[`day`, numbers[0]], [`month`, numbers[1]]]
+		}
+
+		return pairs.every(([part, number]) => date[part] === Number(number)) ? pairs.map(([part]) => part) : []
+	}
+
+	if(/^\d{4}$/.test(term)){
+		return date.year === Number(term) ? [`year`] : []
+	}
+
+	if(/^\d{1,2}(st|nd|rd|th)$/.test(term)){
+		return date.day === parseInt(term, 10) ? [`day`] : []
+	}
+
+	if(/^\d{1,2}$/.test(term)){
+		return [`day`, `month`].filter((part) => date[part] === Number(term))
+	}
+
+	if(/^[a-z]{3,}$/.test(term) && date.month != null){
+		return monthFullNames[date.month - 1].toLowerCase().startsWith(term) ? [`month`] : []
+	}
+
+	return []
+}
+
+// Everyone listed in the image is searched by every name they have, so a person found by an old name still finds their images, and people written in plain text by what was typed
+function getImageNameTexts(image) {
+	return image.people.flatMap((entry) => entry.personId === undefined ? [entry.text] : (persons[entry.personId]?.names?.variants ?? []).map(formatNameText).filter((text) => text != ``))
+}
+
+// Every word has to be found in the date, the note or a name, and the words can be found in different places, so "beach 1950 anna" works, null means the image does not match
+function matchImage(image, terms) {
+	let noteText = (image.note ?? ``).toLowerCase()
+	let nameTexts = getImageNameTexts(image).map((text) => text.toLowerCase())
+	let dateParts = []
+
+	for(let term of terms){
+		let termDateParts = getDateTermParts(term, image.date)
+
+		if(termDateParts.length == 0 && !noteText.includes(term) && !nameTexts.some((nameText) => nameText.includes(term))){
+			return null
+		}
+
+		dateParts.push(...termDateParts)
+	}
+
+	return {
+		dateParts : dateParts
+	}
+}
+
+function findImageMatches(terms) {
+	let matches = []
+
+	for(let imageId of Object.keys(images).map(Number)){
+		let match = matchImage(images[imageId], terms)
+
+		if(match){
+			matches.push({
+				imageId : imageId,
+				dateParts : match.dateParts
+			})
+		}
+	}
+
+	return matches.sort((firstMatch, secondMatch) => compareImagesNewestFirst(firstMatch.imageId, secondMatch.imageId))
+}
+
+// The date is written the way the page writes dates, with the parts that were hit by the search highlighted, and an image with no date says so
+function buildImageDateHtml(date, dateParts) {
+	if(!date){
+		return `Undated`
+	}
+
+	let pieces = [
+		date.day == null ? null : [`day`, getOrdinal(date.day)],
+		date.month == null ? null : [`month`, monthNames[date.month - 1]],
+		date.year == null ? (date.day == null && date.month == null ? null : [`year`, `?`]) : [`year`, date.year]
+	]
+
+	return pieces
+		.filter((piece) => piece)
+		.map(([part, text]) => dateParts.includes(part) ? `<mark>${text}</mark>` : `${text}`)
+		.join(` `)
+}
+
+// Each person is written by the starred name, unless only another of their names contains a word of the search, then that name is shown so the highlight is visible
+function getImageDisplayNames(image, terms) {
+	let isTermFound = (text) => terms.some((term) => text.toLowerCase().includes(term))
+
+	return image.people
+		.map((entry) => {
+			if(entry.personId === undefined){
+				return entry.text
+			}
+
+			let person = persons[entry.personId]
+
+			if(!person){
+				return ``
+			}
+
+			let preferredText = getNameLabel(person)
+
+			return isTermFound(preferredText) ? preferredText : person.names.variants.map(formatNameText).find(isTermFound) ?? preferredText
+		})
+		.filter((name) => name != ``)
+}
+
+// A note can be long so only a short piece of it is shown, starting a little before the first word that was found, or at the start when none was found
+function buildNoteSnippetHtml(note, terms) {
+	let flatNote = note.replace(/\s+/g, ` `).trim()
+	let foundIndexes = terms.map((term) => flatNote.toLowerCase().indexOf(term)).filter((index) => index != -1)
+	let startIndex = foundIndexes.length == 0 ? 0 : Math.max(0, Math.min(...foundIndexes) - 20)
+	let snippetLength = 60
+
+	return buildHighlightHtml(`${startIndex > 0 ? `\u2026` : ``}${flatNote.slice(startIndex, startIndex + snippetLength)}${startIndex + snippetLength < flatNote.length ? `\u2026` : ``}`, terms)
+}
+
+// The picture of an image result is loaded after the results are shown, the addresses made are kept so they can be released the next time the results are drawn, and searchRenderCount tells a late picture that the results it belonged to are gone, lastSearchImageIds is every image that matched, which the preview of a result steps through
+let searchUrls = []
+let searchRenderCount = 0
+let lastSearchImageIds = []
+let searchImageLimit = 20
+
+async function loadResultPictures(imageIds, renderCount) {
+	for(let imageId of imageIds){
+		let blob = await getPreviewBlob(imageId)
+
+		if(searchRenderCount !== renderCount){
+			return
+		}
+
+		if(!blob){
+			continue
+		}
+
+		let url = URL.createObjectURL(blob)
+
+		searchUrls.push(url)
+
+		document.getElementById(`result${imageId}`).src = url
+	}
+}
+
+// The folder of orphaned images is found by typing the start of orphan, orphans or orphaned images, from 3 letters
+function isOrphanFolderQuery(terms) {
+	let text = terms.join(` `)
+
+	return text.length >= 3 && (`orphaned images`.startsWith(text) || `orphans`.startsWith(text))
+}
+
+function buildFolderResultHtml(terms) {
+	return `<div class="result" onclick="openOrphanFolder()"><div class="text">${buildHighlightHtml(`Orphaned images`, terms)}</div><div class="kind">Folder \u00b7 ${describeImageCount(getOrphanImageIds().length)}</div></div>`
+}
+
+// A picture, then the first line with the date and the people, and the fine text with the note, the picture is filled in later by loadResultPictures
+function buildImageResultHtml(match, terms) {
+	let image = images[match.imageId]
+	let namesHtml = getImageDisplayNames(image, terms).map((name) => buildHighlightHtml(name, terms)).join(`, `)
+	let noteHtml = image.note ? buildNoteSnippetHtml(image.note, terms) : ``
+
+	return `<div class="result image" onclick="openImageResult(${match.imageId})"><img class="picture" id="result${match.imageId}" alt=""><div class="text">${buildImageDateHtml(image.date, match.dateParts)}${namesHtml == `` ? `` : ` \u00b7 ${namesHtml}`}</div><div class="kind">Image${noteHtml == `` ? `` : ` \u00b7 ${noteHtml}`}</div></div>`
+}
+
+// The preview opens over whatever page is showing and steps through all the images that matched, the list is taken before the search is closed because closing it clears the results
+function openImageResult(imageId) {
+	let matchedImageIds = lastSearchImageIds
+
+	closeSearch()
+
+	imageNavigationIds = matchedImageIds
+
+	return openImage(imageId)
+}
+
+// Runs on every keystroke and when the box is focused again, an empty box lists nothing, the sections are the orphaned folder when its name is typed, then people, then images, at most searchImageLimit images are drawn because each one loads a picture, and the rest are counted
 function updateSearch() {
 	let terms = getSearchTerms()
 	let resultsElement = document.getElementById(`results`)
+
+	searchRenderCount += 1
+	searchUrls.forEach((url) => URL.revokeObjectURL(url))
+
+	searchUrls = []
+	lastSearchImageIds = []
 
 	if(terms.length == 0){
 		resultsElement.innerHTML = ``
@@ -185,9 +406,27 @@ function updateSearch() {
 		return
 	}
 
-	let matches = findPersonMatches(terms)
+	let hasFolder = isOrphanFolderQuery(terms)
+	let personMatches = findPersonMatches(terms)
+	let imageMatches = findImageMatches(terms)
+	let shownImageMatches = imageMatches.slice(0, searchImageLimit)
 
-	resultsElement.innerHTML = matches.length == 0 ? `<div class="none">No people found</div>` : matches.map((match) => buildSearchResultHtml(match, terms)).join(``)
+	lastSearchImageIds = imageMatches.map((match) => match.imageId)
+
+	if(!hasFolder && personMatches.length == 0 && imageMatches.length == 0){
+		resultsElement.innerHTML = `<div class="none">No results found</div>`
+
+		return
+	}
+
+	resultsElement.innerHTML = [
+		hasFolder ? `<div class="heading">Folders</div>${buildFolderResultHtml(terms)}` : ``,
+		personMatches.length == 0 ? `` : `<div class="heading">People</div>${personMatches.map((match) => buildSearchResultHtml(match, terms)).join(``)}`,
+		imageMatches.length == 0 ? `` : `<div class="heading">Images</div>${shownImageMatches.map((match) => buildImageResultHtml(match, terms)).join(``)}`,
+		imageMatches.length > shownImageMatches.length ? `<div class="none">${imageMatches.length - shownImageMatches.length} more images match, narrow the search to see them</div>` : ``
+	].join(``)
+
+	loadResultPictures(shownImageMatches.map((match) => match.imageId), searchRenderCount)
 }
 
 function closeSearch() {
@@ -212,8 +451,1134 @@ function handleSearchKey(event) {
 	}
 }
 
+// The pixels live in IndexedDB because localStorage holds only a few megabytes, it has three stores, originals keyed by image id hold the uploaded files exactly as they were so no quality is lost, previews keyed by image id hold a copy of each image with its longest side at previewSizePx for the gallery and the search results, and thumbnails keyed by person id hold the square crop shown as that person's profile picture, the two small kinds are kept apart so the page can show pictures without touching the big files and so the originals can later be exported out of the browser without breaking the page
+let thumbnailSizePx = 384
+let previewSizePx = 640
+let imageDatabasePromise = null
+
+// The profile image on screen is remembered as personId:imageId so showing the same person again does not reload it, and its address is kept so it can be released when it is replaced
+let shownPhotoKey = null
+let photoUrl = null
+
+// The database is opened once and reused, a failed opening is forgotten so the next try starts again, version 2 added the previews store, so a database made by version 1 gets it when it is opened and keeps everything else
+function openImageDatabase() {
+	imageDatabasePromise ??= new Promise((resolve, reject) => {
+		let request = indexedDB.open(`relationIndexImages`, 2)
+
+		request.onupgradeneeded = () => {
+			for(let storeName of [`originals`, `previews`, `thumbnails`]){
+				if(!request.result.objectStoreNames.contains(storeName)){
+					request.result.createObjectStore(storeName)
+				}
+			}
+		}
+		request.onsuccess = () => resolve(request.result)
+		request.onerror = () => {
+			imageDatabasePromise = null
+
+			reject(request.error)
+		}
+	})
+
+	return imageDatabasePromise
+}
+
+// Resolves only when the whole transaction is complete, so a saved image is really saved, with the result of the request that the action returned, and rejects when the transaction is aborted
+function runImageTransaction(storeNames, mode, action) {
+	return openImageDatabase().then((database) => new Promise((resolve, reject) => {
+		let transaction = database.transaction(storeNames, mode)
+		let request = action(transaction)
+
+		transaction.oncomplete = () => resolve(request?.result)
+		transaction.onabort = () => reject(transaction.error)
+	}))
+}
+
+// A new image is written to the originals and the previews in one transaction, so either both are saved or neither is, and a thumbnail is written in the same transaction when a person gets a new profile picture with it
+function saveImageBlobs(blobs) {
+	return runImageTransaction([`originals`, `previews`, `thumbnails`], `readwrite`, (transaction) => {
+		let request = transaction.objectStore(`originals`).put(blobs.originalBlob, blobs.imageId)
+
+		transaction.objectStore(`previews`).put(blobs.previewBlob, blobs.imageId)
+
+		if(blobs.thumbnailBlob){
+			request = transaction.objectStore(`thumbnails`).put(blobs.thumbnailBlob, blobs.personId)
+		}
+
+		return request
+	})
+}
+
+function loadThumbnailBlob(personId) {
+	return runImageTransaction(`thumbnails`, `readonly`, (transaction) => transaction.objectStore(`thumbnails`).get(personId))
+}
+
+function deleteThumbnailBlob(personId) {
+	return runImageTransaction(`thumbnails`, `readwrite`, (transaction) => transaction.objectStore(`thumbnails`).delete(personId))
+}
+
+// A preview is only written when an image is first stored or when one is found missing, a thumbnail is written whenever a person gets a new profile picture
+function savePreviewBlob(imageId, blob) {
+	return runImageTransaction(`previews`, `readwrite`, (transaction) => transaction.objectStore(`previews`).put(blob, imageId))
+}
+
+function loadPreviewBlob(imageId) {
+	return runImageTransaction(`previews`, `readonly`, (transaction) => transaction.objectStore(`previews`).get(imageId))
+}
+
+// Only an image that is deleted for good loses its pixels
+function deleteImageBlobs(imageId) {
+	return runImageTransaction([`originals`, `previews`], `readwrite`, (transaction) => {
+		transaction.objectStore(`originals`).delete(imageId)
+
+		return transaction.objectStore(`previews`).delete(imageId)
+	})
+}
+
+// The smaller copy of an image used by the gallery and the search results, it is made from the original when it is missing, which is the case for images stored before previews existed, and if even that fails the original itself is used so something is always shown
+async function getPreviewBlob(imageId) {
+	let previewBlob = await loadPreviewBlob(imageId).catch(() => null)
+
+	if(previewBlob){
+		return previewBlob
+	}
+
+	let originalBlob = await loadOriginalBlob(imageId).catch(() => null)
+
+	if(!originalBlob){
+		return null
+	}
+
+	let madeBlob = null
+
+	try {
+		let bitmap = await createImageBitmap(originalBlob)
+
+		madeBlob = await makeScaledBlob(bitmap, previewSizePx)
+
+		bitmap.close()
+
+		if(madeBlob){
+			await savePreviewBlob(imageId, madeBlob)
+		}
+	} catch {
+		madeBlob = null
+	}
+
+	return madeBlob ?? originalBlob
+}
+
+function loadOriginalBlob(imageId) {
+	return runImageTransaction(`originals`, `readonly`, (transaction) => transaction.objectStore(`originals`).get(imageId))
+}
+
+function saveThumbnailBlob(personId, blob) {
+	return runImageTransaction(`thumbnails`, `readwrite`, (transaction) => transaction.objectStore(`thumbnails`).put(blob, personId))
+}
+
+function getNextImageId() {
+	return Math.max(0, ...Object.keys(images).map(Number)) + 1
+}
+
+// A new image lists only the person whose page it was uploaded on, the date and the note start empty
+function buildNewImage(widthPx, heightPx, personId) {
+	return {
+		widthPx : widthPx,
+		heightPx : heightPx,
+		date : null,
+		note : null,
+		people : [
+			{
+				personId : personId
+			}
+		]
+	}
+}
+
+// The image keeps its proportions with its longest side at longSidePx and is never made larger, a white background is painted first because JPEG has no transparency
+function makeScaledBlob(bitmap, longSidePx) {
+	let scale = Math.min(1, longSidePx / Math.max(bitmap.width, bitmap.height))
+	let canvas = document.createElement(`canvas`)
+
+	canvas.width = Math.round(bitmap.width * scale)
+	canvas.height = Math.round(bitmap.height * scale)
+
+	let drawing = canvas.getContext(`2d`)
+
+	drawing.fillStyle = `white`
+	drawing.fillRect(0, 0, canvas.width, canvas.height)
+	drawing.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+
+	return new Promise((resolve) => canvas.toBlob(resolve, `image/jpeg`, .8))
+}
+
+function clampNumber(value, minimum, maximum) {
+	return Math.min(Math.max(value, minimum), maximum)
+}
+
+// A profile crop is a square cut out of the image, sizeFraction is its side as a part of the shorter side of the image, so 1 is the largest square, and centerXFraction and centerYFraction are where its middle is as a part of the width and of the height, this default is the middle square, which is what the page showed before crops existed
+function getDefaultCrop() {
+	return {
+		sizeFraction : 1,
+		centerXFraction : .5,
+		centerYFraction : .5
+	}
+}
+
+// The crop turned into pixels of the image, moved inside the image if it would stick out
+function getCropSquare(widthPx, heightPx, crop) {
+	let sidePx = Math.min(widthPx, heightPx) * crop.sizeFraction
+
+	return {
+		sidePx : sidePx,
+		leftPx : clampNumber(crop.centerXFraction * widthPx - sidePx / 2, 0, widthPx - sidePx),
+		topPx : clampNumber(crop.centerYFraction * heightPx - sidePx / 2, 0, heightPx - sidePx)
+	}
+}
+
+// The square on the page shows exactly this picture, it is at most thumbnailSizePx wide and is not made larger than the part cut out
+function makeCropThumbnailBlob(bitmap, crop) {
+	let square = getCropSquare(bitmap.width, bitmap.height, crop)
+	let outputPx = Math.max(1, Math.min(thumbnailSizePx, Math.round(square.sidePx)))
+	let canvas = document.createElement(`canvas`)
+
+	canvas.width = outputPx
+	canvas.height = outputPx
+
+	let drawing = canvas.getContext(`2d`)
+
+	drawing.fillStyle = `white`
+	drawing.fillRect(0, 0, outputPx, outputPx)
+	drawing.drawImage(bitmap, square.leftPx, square.topPx, square.sidePx, square.sidePx, 0, 0, outputPx, outputPx)
+
+	return new Promise((resolve) => canvas.toBlob(resolve, `image/jpeg`, .8))
+}
+
+// Clicking the profile square opens a dialog where a rounded square is dragged over the picture and resized with a slider, the picture stays still and everything outside the square is darkened, the draft holds either the image already in the database or a file just chosen that is only stored when Save is pressed, so Cancel changes nothing, the crop is the one described at getDefaultCrop, and the smallest square is photoMinSizeFraction of the shorter side
+let photoMinSizeFraction = .1
+let shownCropUrl = null
+let photoDraft = {
+	imageId : null,
+	file : null,
+	widthPx : 0,
+	heightPx : 0,
+	crop : {
+		sizeFraction : 1,
+		centerXFraction : .5,
+		centerYFraction : .5
+	}
+}
+let photoDraftUrl = null
+let photoDrag = null
+
+function hasPhotoDraftImage() {
+	return photoDraft.imageId != null || photoDraft.file != null
+}
+
+function releasePhotoUrl() {
+	if(photoDraftUrl){
+		URL.revokeObjectURL(photoDraftUrl)
+	}
+
+	photoDraftUrl = null
+	shownCropUrl = null
+}
+
+// The picture is placed once at a fixed size, as large as fits the dialog, and never moves, a rounded square on top of it is the crop, it is placed with percentages of the picture, so no measuring is needed, and everything outside it is darkened by the frame's own shadow in the stylesheet, the picture is given to the page only when it changes so dragging does not reload it
+function renderPhotoCropper() {
+	let hasImage = hasPhotoDraftImage()
+	let cropperElement = document.getElementById(`photoCropper`)
+	let imageElement = document.getElementById(`photoCropImage`)
+	let frameElement = document.getElementById(`photoCropFrame`)
+
+	cropperElement.className = hasImage ? `cropper` : `cropper empty`
+	frameElement.hidden = !hasImage
+	imageElement.hidden = !hasImage || !photoDraftUrl
+
+	document.getElementById(`photoSize`).disabled = !hasImage
+	document.getElementById(`photoSize`).value = photoDraft.crop.sizeFraction
+
+	if(!hasImage){
+		cropperElement.style.aspectRatio = ``
+		cropperElement.style.width = ``
+
+		return
+	}
+
+	let sidePx = Math.min(photoDraft.widthPx, photoDraft.heightPx) * photoDraft.crop.sizeFraction
+
+	cropperElement.style.aspectRatio = `${photoDraft.widthPx} / ${photoDraft.heightPx}`
+	cropperElement.style.width = `min(100%, ${photoDraft.widthPx / photoDraft.heightPx * 60}dvh)`
+	frameElement.style.width = `${sidePx / photoDraft.widthPx * 100}%`
+	frameElement.style.height = `${sidePx / photoDraft.heightPx * 100}%`
+	frameElement.style.left = `${(photoDraft.crop.centerXFraction - sidePx / 2 / photoDraft.widthPx) * 100}%`
+	frameElement.style.top = `${(photoDraft.crop.centerYFraction - sidePx / 2 / photoDraft.heightPx) * 100}%`
+
+	if(photoDraftUrl && photoDraftUrl !== shownCropUrl){
+		imageElement.src = photoDraftUrl
+		shownCropUrl = photoDraftUrl
+	}
+}
+
+// Keeps the crop between the smallest size and the whole shorter side, and inside the image, a square that grows past an edge is pushed back in
+function clampPhotoCrop() {
+	let crop = photoDraft.crop
+
+	crop.sizeFraction = clampNumber(crop.sizeFraction, photoMinSizeFraction, 1)
+
+	let sidePx = Math.min(photoDraft.widthPx, photoDraft.heightPx) * crop.sizeFraction
+
+	crop.centerXFraction = clampNumber(crop.centerXFraction, sidePx / 2 / photoDraft.widthPx, 1 - sidePx / 2 / photoDraft.widthPx)
+	crop.centerYFraction = clampNumber(crop.centerYFraction, sidePx / 2 / photoDraft.heightPx, 1 - sidePx / 2 / photoDraft.heightPx)
+}
+
+// Pressing on the picture starts a drag, pressing outside the square first moves the square's middle to the pointer, the distance between the pointer and the middle is remembered and kept while dragging, so the square always follows the pointer exactly and does not drift when the pointer goes past an edge, an empty cropper is a button for choosing an image instead
+function startPhotoDrag(event) {
+	if(!hasPhotoDraftImage()){
+		choosePhoto()
+
+		return
+	}
+
+	let pictureBox = event.currentTarget.getBoundingClientRect()
+	let pointerXFraction = (event.clientX - pictureBox.left) / pictureBox.width
+	let pointerYFraction = (event.clientY - pictureBox.top) / pictureBox.height
+	let halfSidePx = Math.min(photoDraft.widthPx, photoDraft.heightPx) * photoDraft.crop.sizeFraction / 2
+
+	if(Math.abs(pointerXFraction - photoDraft.crop.centerXFraction) > halfSidePx / photoDraft.widthPx || Math.abs(pointerYFraction - photoDraft.crop.centerYFraction) > halfSidePx / photoDraft.heightPx){
+		photoDraft.crop.centerXFraction = pointerXFraction
+		photoDraft.crop.centerYFraction = pointerYFraction
+
+		clampPhotoCrop()
+		renderPhotoCropper()
+	}
+
+	photoDrag = {
+		pointerId : event.pointerId,
+		offsetXFraction : pointerXFraction - photoDraft.crop.centerXFraction,
+		offsetYFraction : pointerYFraction - photoDraft.crop.centerYFraction
+	}
+
+	event.currentTarget.setPointerCapture(event.pointerId)
+}
+
+function movePhotoDrag(event) {
+	if(!photoDrag || photoDrag.pointerId !== event.pointerId){
+		return
+	}
+
+	let pictureBox = event.currentTarget.getBoundingClientRect()
+
+	photoDraft.crop.centerXFraction = (event.clientX - pictureBox.left) / pictureBox.width - photoDrag.offsetXFraction
+	photoDraft.crop.centerYFraction = (event.clientY - pictureBox.top) / pictureBox.height - photoDrag.offsetYFraction
+
+	clampPhotoCrop()
+	renderPhotoCropper()
+}
+
+function endPhotoDrag() {
+	photoDrag = null
+}
+
+// The slider is the size of the square as a part of the shorter side of the picture, the middle of the square stays where it was
+function updatePhotoSize() {
+	photoDraft.crop.sizeFraction = Number(document.getElementById(`photoSize`).value)
+
+	clampPhotoCrop()
+	renderPhotoCropper()
+}
+
+
+// The dialog opens at once and the picture is loaded after, it is dropped if the dialog was closed meanwhile, the saved crop is used, or the middle square for a profile picture that has none
+async function openPhoto() {
+	let person = persons[activeHistory.at(-1)]
+
+	if(!person){
+		return
+	}
+
+	let imageId = images[person.profileImageId] ? person.profileImageId : null
+
+	photoDraft = {
+		imageId : imageId,
+		file : null,
+		widthPx : images[imageId]?.widthPx ?? 0,
+		heightPx : images[imageId]?.heightPx ?? 0,
+		crop : {
+			...getDefaultCrop(),
+			...(imageId == null ? {} : person.profileCrop)
+		}
+	}
+
+	releasePhotoUrl()
+	clearPhotoIssue()
+	renderPhotoCropper()
+
+	document.getElementById(`photoDialog`).showModal()
+
+	if(imageId == null){
+		return
+	}
+
+	let blob = (await loadOriginalBlob(imageId).catch(() => null)) ?? (await getPreviewBlob(imageId))
+
+	if(photoDraft.imageId !== imageId || photoDraft.file || !blob){
+		return
+	}
+
+	photoDraftUrl = URL.createObjectURL(blob)
+
+	renderPhotoCropper()
+}
+
+function clearPhotoIssue() {
+	document.getElementById(`photoIssue`).textContent = ``
+}
+
+function choosePhoto() {
+	document.getElementById(`photoInput`).click()
+}
+
+// A chosen file replaces the draft and starts with the middle square, nothing is stored yet
+async function choosePhotoFile(event) {
+	let file = event.target.files[0]
+
+	event.target.value = ``
+
+	if(!file || !file.type.startsWith(`image/`)){
+		return
+	}
+
+	try {
+		let bitmap = await createImageBitmap(file)
+
+		photoDraft = {
+			imageId : null,
+			file : file,
+			widthPx : bitmap.width,
+			heightPx : bitmap.height,
+			crop : getDefaultCrop()
+		}
+
+		bitmap.close()
+	} catch {
+		document.getElementById(`photoIssue`).textContent = `\u26a0 That image could not be read.`
+
+		return
+	}
+
+	clearPhotoIssue()
+	releasePhotoUrl()
+
+	photoDraftUrl = URL.createObjectURL(file)
+
+	renderPhotoCropper()
+}
+
+
+
+
+
+
+function closePhoto() {
+	document.getElementById(`photoDialog`).close()
+}
+
+// Runs whenever the dialog closes, including with the Escape key
+function releasePhoto() {
+	releasePhotoUrl()
+
+	photoDrag = null
+	photoDraft.imageId = null
+	photoDraft.file = null
+}
+
+// A new file is stored as an image of the person together with the picture that is shown, an image already in the database only gets a new thumbnail from the new crop, nothing is changed unless everything worked
+async function saveProfile(event) {
+	event.preventDefault()
+
+	let personId = activeHistory.at(-1)
+
+	if(!persons[personId] || !hasPhotoDraftImage()){
+		closePhoto()
+
+		return
+	}
+
+	try {
+		let imageId = photoDraft.imageId
+		let sourceBlob = photoDraft.file ?? await loadOriginalBlob(imageId)
+
+		if(!sourceBlob){
+			throw new Error(`The image is missing`)
+		}
+
+		let bitmap = await createImageBitmap(sourceBlob)
+		let thumbnailBlob = await makeCropThumbnailBlob(bitmap, photoDraft.crop)
+		let previewBlob = photoDraft.file ? await makeScaledBlob(bitmap, previewSizePx) : null
+
+		bitmap.close()
+
+		if(!thumbnailBlob || (photoDraft.file && !previewBlob)){
+			throw new Error(`A picture could not be made`)
+		}
+
+		if(photoDraft.file){
+			imageId = getNextImageId()
+
+			await saveImageBlobs({
+				imageId : imageId,
+				personId : personId,
+				originalBlob : photoDraft.file,
+				previewBlob : previewBlob,
+				thumbnailBlob : thumbnailBlob
+			})
+
+			images[imageId] = buildNewImage(photoDraft.widthPx, photoDraft.heightPx, personId)
+		} else {
+			await saveThumbnailBlob(personId, thumbnailBlob)
+		}
+
+		persons[personId].profileImageId = imageId
+		persons[personId].profileCrop = { ...photoDraft.crop }
+	} catch {
+		document.getElementById(`photoIssue`).textContent = `\u26a0 The profile picture could not be saved.`
+
+		return
+	}
+
+	saveData()
+	closePhoto()
+	viewPerson()
+}
+
+// Shows the person's thumbnail in the square, a person with no profile image gets the empty square with a plus, the square is left alone when it already shows the right picture so nothing flashes, a new crop of the same image counts as a new picture, and a thumbnail that arrives after the person on screen has changed is thrown away
+async function renderPhoto(personId) {
+	let imageId = persons[personId]?.profileImageId ?? null
+	let photoKey = imageId == null ? null : `${personId}:${imageId}:${JSON.stringify(persons[personId].profileCrop ?? null)}`
+
+	document.getElementById(`photo`).className = imageId == null ? `empty` : ``
+
+	if(photoKey === shownPhotoKey){
+		return
+	}
+
+	clearPhoto()
+
+	if(photoKey == null){
+		return
+	}
+
+	shownPhotoKey = photoKey
+
+	let thumbnailBlob = await loadThumbnailBlob(personId).catch(() => null)
+
+	if(shownPhotoKey !== photoKey){
+		return
+	}
+
+	if(!thumbnailBlob){
+		shownPhotoKey = null
+
+		return
+	}
+
+	photoUrl = URL.createObjectURL(thumbnailBlob)
+
+	document.getElementById(`photo`).innerHTML = `<img src="${photoUrl}">`
+}
+
+function clearPhoto() {
+	if(photoUrl){
+		URL.revokeObjectURL(photoUrl)
+	}
+
+	photoUrl = null
+	shownPhotoKey = null
+
+	document.getElementById(`photo`).innerHTML = ``
+}
+
+// Deleting a person never deletes an image, the person is taken out of every image that lists them and written in as plain text instead so who was in the image is not lost, an image that no longer lists anyone in the database is an orphan and belongs in the orphaned folder, which is worked out from the list rather than stored
+function unlinkPersonFromImages(personId) {
+	let nameText = formatNameText(getPreferredName(persons[personId]))
+
+	for(let image of Object.values(images)){
+		image.people = image.people
+			.map((entry) => entry.personId === personId ? (nameText == `` ? null : { text : nameText }) : entry)
+			.filter((entry) => entry)
+	}
+}
+
+// The gallery shows every image that lists the person, so a photo of two people appears on both pages, the tiles are laid out from the saved size before any pixels have loaded so nothing jumps, and the urls made for the pixels are kept so they can be released when the gallery is redrawn
+let shownGalleryKey = null
+let galleryUrls = []
+
+// Dated images come first, newest first, a part that is not known counts as the earliest in its place, so an image with only a year comes after one with a month in that year, and an image with no year comes after those with a year, then the undated images, ties and the undated ones are put with the most recently added first
+function compareImagesNewestFirst(firstImageId, secondImageId) {
+	let firstDate = images[firstImageId].date
+	let secondDate = images[secondImageId].date
+
+	if(!firstDate || !secondDate){
+		return (firstDate ? 0 : 1) - (secondDate ? 0 : 1) || secondImageId - firstImageId
+	}
+
+	return (secondDate.year ?? -1) - (firstDate.year ?? -1) || (secondDate.month ?? 0) - (firstDate.month ?? 0) || (secondDate.day ?? 0) - (firstDate.day ?? 0) || secondImageId - firstImageId
+}
+
+function getGalleryImageIds(personId) {
+	return Object.keys(images)
+		.map(Number)
+		.filter((imageId) => images[imageId].people.some((entry) => entry.personId === personId))
+		.sort(compareImagesNewestFirst)
+}
+
+// Dated images, a divider, then undated images, as tiles, every tile has the same height and takes its width from the proportions of its image so nothing moves when the pictures arrive, idPrefix keeps the tiles of the gallery and of the orphaned folder apart, and clickFunction is called with the image id when a tile is clicked
+function buildTilesHtml(imageIds, idPrefix, clickFunction) {
+	let datedCount = imageIds.filter((imageId) => images[imageId].date).length
+
+	return `<div class="tiles">${imageIds.map((imageId, index) => `${index == datedCount && datedCount > 0 ? `<div class="divider"></div>` : ``}<div class="tile" style="aspect-ratio: ${images[imageId].widthPx} / ${images[imageId].heightPx}" onclick="${clickFunction}(${imageId})"><img id="${idPrefix}${imageId}" alt=""></div>`).join(``)}</div>`
+}
+
+// The previews are loaded one tile at a time into the tiles made by buildTilesHtml, urls collects the addresses made so they can be released later, and the loading stops as soon as isCurrent says the tiles on screen are no longer these
+async function loadTilePictures(imageIds, idPrefix, urls, isCurrent) {
+	for(let imageId of imageIds){
+		let blob = await getPreviewBlob(imageId)
+
+		if(!isCurrent()){
+			return
+		}
+
+		if(!blob){
+			continue
+		}
+
+		let url = URL.createObjectURL(blob)
+
+		urls.push(url)
+
+		document.getElementById(`${idPrefix}${imageId}`).src = url
+	}
+}
+
+// Drawn again only when the person, the order of their images or the place of the divider changed
+async function renderGallery(personId) {
+	let imageIds = getGalleryImageIds(personId)
+	let datedCount = imageIds.filter((imageId) => images[imageId].date).length
+	let galleryKey = `${personId}:${imageIds.join(`,`)}:${datedCount}`
+
+	if(galleryKey === shownGalleryKey){
+		return
+	}
+
+	clearGallery()
+
+	shownGalleryKey = galleryKey
+
+	document.getElementById(`gallery`).innerHTML = `<div class="heading" onclick="chooseGalleryImages()"><span>Images</span><span class="action">+ add</span></div>${imageIds.length == 0 ? `` : buildTilesHtml(imageIds, `tile`, `openGalleryImage`)}`
+
+	await loadTilePictures(imageIds, `tile`, galleryUrls, () => shownGalleryKey === galleryKey)
+}
+
+// The preview of an image from the gallery steps through the images of that gallery
+function openGalleryImage(imageId) {
+	imageNavigationIds = getGalleryImageIds(activeHistory.at(-1))
+
+	return openImage(imageId)
+}
+
+// Several files can be given at once, by the file picker or by dropping them on the gallery, each one is checked, stored and listed on its own so one bad file does not stop the others, the details are saved once at the end and the page is redrawn once, and the number that failed is reported once
+async function addGalleryFiles(fileList) {
+	let files = [...fileList].filter((file) => file.type.startsWith(`image/`))
+	let personId = activeHistory.at(-1)
+	let failedCount = 0
+
+	if(files.length == 0 || !persons[personId]){
+		return
+	}
+
+	for(let file of files){
+		try {
+			let bitmap = await createImageBitmap(file)
+			let imageWidthPx = bitmap.width
+			let imageHeightPx = bitmap.height
+			let previewBlob = await makeScaledBlob(bitmap, previewSizePx)
+
+			bitmap.close()
+
+			if(!previewBlob){
+				throw new Error(`The preview could not be made`)
+			}
+
+			let imageId = getNextImageId()
+
+			await saveImageBlobs({
+				imageId : imageId,
+				originalBlob : file,
+				previewBlob : previewBlob
+			})
+
+			images[imageId] = buildNewImage(imageWidthPx, imageHeightPx, personId)
+		} catch {
+			failedCount += 1
+		}
+	}
+
+	saveData()
+	viewPerson()
+
+	if(failedCount > 0){
+		window.alert(`${failedCount} of ${files.length} images could not be read or saved.`)
+	}
+}
+
+// The files are copied out of the input before it is reset, because resetting it empties the list
+function uploadGalleryImages(event) {
+	let files = [...event.target.files]
+
+	event.target.value = ``
+
+	return addGalleryFiles(files)
+}
+
+function dropGalleryFiles(event) {
+	event.preventDefault()
+
+	return addGalleryFiles(event.dataTransfer.files)
+}
+
+function clearGallery() {
+	galleryUrls.forEach((url) => URL.revokeObjectURL(url))
+
+	galleryUrls = []
+	shownGalleryKey = null
+
+	document.getElementById(`gallery`).innerHTML = ``
+}
+
+function chooseGalleryImages() {
+	document.getElementById(`galleryInput`).click()
+}
+
+// The preview works on a copy of the list of people so Cancel throws every change away, the date and the note are read from their boxes when saving, and the url made for the pixels is released when the dialog closes
+let imageDraft = {
+	imageId : null,
+	people : []
+}
+let previewUrl = null
+
+function clearImageIssue() {
+	document.getElementById(`imageIssue`).textContent = ``
+}
+
+function showImageIssue(issue) {
+	document.getElementById(`imageIssue`).textContent = `\u26a0 ${issue}`
+}
+
+// A person in the database is written by the name they have now, so renaming them renames them in every image, and a person written in plain text is shown as typed
+function buildImagePersonHtml(entry, index) {
+	let isLinked = entry.personId !== undefined
+	let label = isLinked ? (persons[entry.personId] ? getNameLabel(persons[entry.personId]) : `Unknown person`) : entry.text
+
+	return `<div class="entry"><span class="text">${escapeHtml(label)}</span><span class="meta">${isLinked ? `Person` : `Plain text`}</span><span class="remove" onclick="removeImagePerson(${index})">remove</span></div>`
+}
+
+// An image that lists nobody in the database no longer appears in any gallery, so the dialog says so before it is saved
+function renderImagePeople() {
+	document.getElementById(`imagePeople`).innerHTML = imageDraft.people.map(buildImagePersonHtml).join(``)
+	document.getElementById(`imageNotice`).textContent = imageDraft.people.some((entry) => entry.personId !== undefined) ? `` : `No person is listed, so this image will no longer appear in any gallery.`
+}
+
+// What is typed in the person box is matched against the names in the database the same way as the search box, people already listed are left out, and the last row always offers to keep the text as it was typed
+function renderImageSuggestions() {
+	let text = document.getElementById(`imagePersonName`).value.trim()
+	let terms = splitSearchTerms(text)
+
+	if(terms.length == 0){
+		document.getElementById(`imageSuggestions`).innerHTML = ``
+
+		return
+	}
+
+	let matches = findPersonMatches(terms)
+		.filter((match) => !imageDraft.people.some((entry) => entry.personId === Number(match.id)))
+		.slice(0, 5)
+
+	document.getElementById(`imageSuggestions`).innerHTML = `${matches.map((match) => `<div class="entry" onclick="addImagePerson(${match.id})"><span class="text">${buildHighlightHtml(match.text, terms)}</span><span class="meta">Person</span></div>`).join(``)}<div class="entry" onclick="addImageText()"><span class="text">Add \u201c${escapeHtml(text)}\u201d as plain text</span></div>`
+}
+
+function finishAddingImagePerson() {
+	document.getElementById(`imagePersonName`).value = ``
+
+	renderImagePeople()
+	renderImageSuggestions()
+
+	document.getElementById(`imagePersonName`).focus()
+}
+
+function addImagePerson(personId) {
+	if(!imageDraft.people.some((entry) => entry.personId === personId)){
+		imageDraft.people.push({
+			personId : personId
+		})
+	}
+
+	finishAddingImagePerson()
+}
+
+// The same plain text is not added twice, whatever its case
+function addImageText() {
+	let text = document.getElementById(`imagePersonName`).value.trim()
+
+	if(text != `` && !imageDraft.people.some((entry) => entry.text?.toLowerCase() === text.toLowerCase())){
+		imageDraft.people.push({
+			text : text
+		})
+	}
+
+	finishAddingImagePerson()
+}
+
+function removeImagePerson(index) {
+	imageDraft.people.splice(index, 1)
+
+	renderImagePeople()
+}
+
+// Enter must not save the whole dialog from inside the person box, it takes the first row of the list instead, which is the best matching person or else the plain text
+function handleImagePersonKey(event) {
+	if(event.key != `Enter`){
+		return
+	}
+
+	event.preventDefault()
+
+	document.querySelector(`#imageSuggestions>.entry`)?.click()
+}
+
+function readImageDateForm() {
+	return {
+		day : document.getElementById(`imageDay`).value.trim(),
+		month : document.getElementById(`imageMonth`).value.trim(),
+		year : document.getElementById(`imageYear`).value.trim()
+	}
+}
+
+// Every keystroke refreshes the matches and says at once when the date is impossible
+function updateImageDialog() {
+	let form = readImageDateForm()
+	let issue = getDateIssue(form.day, form.month, form.year)
+
+	if(issue == ``){
+		clearImageIssue()
+	} else {
+		showImageIssue(issue)
+	}
+
+	renderImageSuggestions()
+}
+
+// The images the arrows of the preview step through, in order, set by whatever opened the preview, the gallery, the search results or the orphaned folder
+let imageNavigationIds = []
+
+// An image that lists nobody in the database belongs to nobody and is kept in the orphaned folder
+function isImageOrphan(image) {
+	return !image.people.some((entry) => entry.personId !== undefined)
+}
+
+// The arrows and the counter only show when there is somewhere to go, the first image has no previous and the last has no next
+function renderImageNavigation() {
+	let index = imageNavigationIds.indexOf(imageDraft.imageId)
+
+	document.getElementById(`imagePrevious`).hidden = index <= 0
+	document.getElementById(`imageNext`).hidden = index == -1 || index >= imageNavigationIds.length - 1
+	document.getElementById(`imageCounter`).textContent = imageNavigationIds.length > 1 && index != -1 ? `${index + 1} of ${imageNavigationIds.length}` : ``
+}
+
+// The pixels are loaded after the dialog is open so it appears at once, the original is used and the preview copy only when the original is not there, they are dropped if the dialog was closed or switched to another image while they loaded, an image opened while the dialog is already open, by the arrows, reuses it
+async function openImage(imageId) {
+	let image = images[imageId]
+
+	if(!image){
+		return
+	}
+
+	if(!imageNavigationIds.includes(imageId)){
+		imageNavigationIds = [imageId]
+	}
+
+	imageDraft = {
+		imageId : imageId,
+		people : image.people.map((entry) => ({ ...entry }))
+	}
+
+	document.getElementById(`imageDay`).value = image.date?.day ?? ``
+	document.getElementById(`imageMonth`).value = image.date?.month ?? ``
+	document.getElementById(`imageYear`).value = image.date?.year ?? ``
+	document.getElementById(`imageNote`).value = image.note ?? ``
+	document.getElementById(`imagePersonName`).value = ``
+
+	// Making an image the profile image only makes sense for a person who is listed in it, and not when it already is the profile image
+	document.getElementById(`imageProfile`).hidden = !image.people.some((entry) => entry.personId === activeHistory.at(-1)) || persons[activeHistory.at(-1)]?.profileImageId === imageId
+
+	clearImageIssue()
+	renderImagePeople()
+	renderImageSuggestions()
+	renderImageNavigation()
+
+	if(!document.getElementById(`imageDialog`).open){
+		document.getElementById(`imageDialog`).showModal()
+	}
+
+	let blob = (await loadOriginalBlob(imageId).catch(() => null)) ?? (await getPreviewBlob(imageId))
+
+	if(imageDraft.imageId !== imageId || !blob){
+		return
+	}
+
+	previewUrl = URL.createObjectURL(blob)
+
+	document.getElementById(`imagePicture`).innerHTML = `<img src="${previewUrl}" alt="">`
+}
+
+// An empty date is stored as no date, an impossible one is reported and nothing is written, true means the image is saved, or that there was nothing to save
+function commitImageDraft() {
+	let image = images[imageDraft.imageId]
+
+	if(!image){
+		return true
+	}
+
+	let form = readImageDateForm()
+	let issue = getDateIssue(form.day, form.month, form.year)
+
+	if(issue != ``){
+		showImageIssue(issue)
+
+		return false
+	}
+
+	let note = document.getElementById(`imageNote`).value.trim()
+
+	image.people = imageDraft.people
+	image.date = form.day == `` && form.month == `` && form.year == `` ? null : {
+		day : form.day == `` ? null : Number(form.day),
+		month : form.month == `` ? null : Number(form.month),
+		year : form.year == `` ? null : Number(form.year)
+	}
+	image.note = note == `` ? null : note
+
+	saveData()
+
+	return true
+}
+
+// The page behind the preview is redrawn so an image that was dated, or that no longer lists this person, moves or leaves their gallery, and the orphaned folder is redrawn when it is open
+function refreshAfterImageChange() {
+	viewPerson()
+	renderOrphanFolder()
+}
+
+function saveImage(event) {
+	event.preventDefault()
+
+	if(!commitImageDraft()){
+		return
+	}
+
+	closeImage()
+	refreshAfterImageChange()
+}
+
+// Going to another image saves the one being left first, so what was typed is not lost, and stays where it is when the date is impossible
+async function showAdjacentImage(step) {
+	let index = imageNavigationIds.indexOf(imageDraft.imageId)
+	let targetImageId = imageNavigationIds[index + step]
+
+	if(index == -1 || targetImageId === undefined || !commitImageDraft()){
+		return
+	}
+
+	refreshAfterImageChange()
+	releaseImage()
+
+	await openImage(targetImageId)
+}
+
+// The left and right arrow keys do the same as the buttons, except while typing in a box where they move the cursor
+function handleImageKey(event) {
+	if(![`ArrowLeft`, `ArrowRight`].includes(event.key) || [`INPUT`, `TEXTAREA`].includes(event.target.tagName)){
+		return
+	}
+
+	event.preventDefault()
+
+	showAdjacentImage(event.key == `ArrowLeft` ? -1 : 1)
+}
+
+// Makes the thumbnail from the stored original using the middle square, so any image in the gallery can become the profile image, the crop can be changed afterwards by clicking the square, this takes effect at once and does not wait for Save
+async function setImageAsProfile() {
+	let personId = activeHistory.at(-1)
+	let imageId = imageDraft.imageId
+	let crop = getDefaultCrop()
+
+	if(!persons[personId] || imageId == null){
+		return
+	}
+
+	try {
+		let blob = await loadOriginalBlob(imageId)
+		let bitmap = await createImageBitmap(blob)
+		let thumbnailBlob = await makeCropThumbnailBlob(bitmap, crop)
+
+		bitmap.close()
+
+		if(!thumbnailBlob){
+			throw new Error(`The thumbnail could not be made`)
+		}
+
+		await saveThumbnailBlob(personId, thumbnailBlob)
+
+		persons[personId].profileImageId = imageId
+		persons[personId].profileCrop = crop
+	} catch {
+		window.alert(`That image could not be made the profile image.`)
+
+		return
+	}
+
+	saveData()
+	viewPerson()
+
+	document.getElementById(`imageProfile`).hidden = true
+}
+
+// Deletes the image for good, after asking, this is the only thing that ever removes an image, the original and the preview are gone and nothing can bring them back, the question says whose gallery it is in and who loses a profile picture, anyone who had it as their profile picture is left without one, and the page behind is redrawn
+async function deleteImage() {
+	let imageId = imageDraft.imageId
+	let image = images[imageId]
+
+	if(!image){
+		return
+	}
+
+	let listedIds = image.people.map((entry) => entry.personId).filter((personId) => persons[personId])
+	let ownerIds = Object.keys(persons).map(Number).filter((personId) => persons[personId].profileImageId === imageId)
+	let listedText = listedIds.length == 0 ? `` : ` It is in the gallery of ${listedIds.map((personId) => getNameLabel(persons[personId])).join(`, `)}.`
+	let ownerText = ownerIds.length == 0 ? `` : ` It is the profile picture of ${ownerIds.map((personId) => getNameLabel(persons[personId])).join(`, `)}, who will have no profile picture.`
+
+	if(!window.confirm(`Delete this image permanently? This cannot be undone.${listedText}${ownerText}`)){
+		return
+	}
+
+	try {
+		await deleteImageBlobs(imageId)
+	} catch {
+		window.alert(`That image could not be deleted.`)
+
+		return
+	}
+
+	for(let personId of ownerIds){
+		delete persons[personId].profileImageId
+		delete persons[personId].profileCrop
+
+		deleteThumbnailBlob(personId).catch(() => {})
+	}
+
+	delete images[imageId]
+
+	imageNavigationIds = imageNavigationIds.filter((navigationImageId) => navigationImageId != imageId)
+
+	saveData()
+	closeImage()
+	refreshAfterImageChange()
+}
+
+function describeImageCount(count) {
+	return `${count} ${count == 1 ? `image` : `images`}`
+}
+
+function getOrphanImageIds() {
+	return Object.keys(images)
+		.map(Number)
+		.filter((imageId) => isImageOrphan(images[imageId]))
+		.sort(compareImagesNewestFirst)
+}
+
+// The orphaned folder is a dialog with the tiles of every image that belongs to nobody, it is drawn again whenever an image changes while it is open, and the count is written out so an empty folder says so
+let orphanUrls = []
+let orphanRenderCount = 0
+
+async function renderOrphanFolder() {
+	if(!document.getElementById(`orphanDialog`).open){
+		return
+	}
+
+	let imageIds = getOrphanImageIds()
+
+	orphanRenderCount += 1
+
+	let renderCount = orphanRenderCount
+
+	orphanUrls.forEach((url) => URL.revokeObjectURL(url))
+
+	orphanUrls = []
+
+	document.getElementById(`orphanCount`).textContent = imageIds.length == 0 ? `There are no orphaned images.` : `${describeImageCount(imageIds.length)} that list no one in the database, kept here until a person is added to them or they are deleted.`
+	document.getElementById(`orphanTiles`).innerHTML = imageIds.length == 0 ? `` : buildTilesHtml(imageIds, `orphanTile`, `openOrphanImage`)
+
+	await loadTilePictures(imageIds, `orphanTile`, orphanUrls, () => orphanRenderCount === renderCount)
+}
+
+function openOrphanFolder() {
+	closeSearch()
+
+	document.getElementById(`orphanDialog`).showModal()
+
+	renderOrphanFolder()
+}
+
+function openOrphanImage(imageId) {
+	imageNavigationIds = getOrphanImageIds()
+
+	return openImage(imageId)
+}
+
+function closeOrphanFolder() {
+	document.getElementById(`orphanDialog`).close()
+}
+
+// Runs whenever the folder closes, so the pictures are released
+function releaseOrphanFolder() {
+	orphanRenderCount += 1
+
+	orphanUrls.forEach((url) => URL.revokeObjectURL(url))
+
+	orphanUrls = []
+
+	document.getElementById(`orphanTiles`).innerHTML = ``
+}
+
+function closeImage() {
+	document.getElementById(`imageDialog`).close()
+}
+
+// Runs whenever the dialog closes, including with the Escape key, so the pixels are always released
+function releaseImage() {
+	if(previewUrl){
+		URL.revokeObjectURL(previewUrl)
+	}
+
+	previewUrl = null
+	imageDraft.imageId = null
+
+	document.getElementById(`imagePicture`).innerHTML = ``
+}
+
 // A birth or a death is a list of entered dates because sources disagree, each entry is { year, month, day, order, link, note } with null for every part that is not known, order saying how close the source is and link and note being optional, preferredVariantIndex is the starred entry that the person's page shows, and a person with no entered dates has no such property at all
 let monthNames = [`Jan`, `Feb`, `Mar`, `Apr`, `May`, `Jun`, `Jul`, `Aug`, `Sep`, `Oct`, `Nov`, `Dec`]
+let monthFullNames = [`January`, `February`, `March`, `April`, `May`, `June`, `July`, `August`, `September`, `October`, `November`, `December`]
 let editedDateKind = `birth`
 
 // Both lists are edited together in one dialog, so each has its own copy in dateDrafts, and dateDraft is the copy of the side on show, the death copy also keeps whether the person is declared dead with no date

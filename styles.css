@@ -231,10 +231,42 @@ body{
 			&:empty{
 				display: none;
 			}
+			mark{
+				background: rgba(150, 150, 150, .5);
+				border-radius: .2em;
+				color: inherit;
+			}
+			>.heading{
+				color: grey;
+				font-size: .8em;
+				letter-spacing: .1em;
+				padding: .25em .5em 0;
+				text-transform: uppercase;
+				user-select: none;
+			}
 			>.result{
 				border-radius: .5em;
 				cursor: pointer;
 				padding: .25em .5em;
+				&.image{
+					align-items: center;
+					column-gap: .5em;
+					display: grid;
+					grid-template-columns: 3em minmax(0, 1fr);
+					>.picture{
+						aspect-ratio: 1;
+						background: rgba(200, 200, 200, .3);
+						border-radius: .5em;
+						grid-column: 1;
+						grid-row: 1 / span 2;
+						object-fit: cover;
+						width: 100%;
+					}
+					>.text,
+					>.kind{
+						grid-column: 2;
+					}
+				}
 				&:hover{
 					background: rgba(200, 200, 200, .5);
 					border-radius: 1em;
@@ -243,11 +275,6 @@ body{
 					overflow: hidden;
 					text-overflow: ellipsis;
 					white-space: nowrap;
-					mark{
-						background: rgba(150, 150, 150, .5);
-						border-radius: .2em;
-						color: inherit;
-					}
 				}
 				>.kind{
 					color: grey;
@@ -279,6 +306,52 @@ body{
 	}
 	#profile{
 		padding: 1em;
+		#header{
+			align-items: flex-start;
+			display: flex;
+			gap: 1em;
+			&[hidden]{
+				display: none;
+			}
+			>#photo{
+				aspect-ratio: 1;
+				background: rgba(200, 200, 200, .3);
+				border-radius: .75em;
+				cursor: pointer;
+				flex: none;
+				overflow: hidden;
+				position: relative;
+				user-select: none;
+				width: 6em;
+				&:hover{
+					background: rgba(200, 200, 200, .5);
+					border-radius: 1em;
+				}
+				&.empty{
+					&:before,
+					&:after{
+						background: grey;
+						border-radius: 1em;
+						content: '';
+						height: .2em;
+						left: 50%;
+						position: absolute;
+						top: 50%;
+						translate: -50% -50%;
+						width: 1.5em;
+					}
+					&:after{
+						rotate: 90deg;
+					}
+				}
+				>img{
+					display: block;
+					height: 100%;
+					object-fit: cover;
+					width: 100%;
+				}
+			}
+		}
 		#name{
 			font-size: 2em;
 			width: fit-content;
@@ -354,6 +427,70 @@ body{
 				}
 			}
 		}
+		#gallery{
+			margin-top: 1em;
+			>.heading{
+				align-items: baseline;
+				border-radius: .25em;
+				color: grey;
+				cursor: pointer;
+				display: flex;
+				font-size: .8em;
+				gap: 1em;
+				letter-spacing: .1em;
+				padding: 0 .25em;
+				text-transform: uppercase;
+				user-select: none;
+				width: fit-content;
+				&:hover{
+					background: rgba(200, 200, 200, .3);
+				}
+				>.action{
+					opacity: 0;
+					@media (hover: none){
+						opacity: 1;
+					}
+				}
+			}
+			&:hover{
+				>.heading>.action{
+					opacity: 1;
+				}
+			}
+		}
+	}
+	.tiles{
+		display: flex;
+		flex-wrap: wrap;
+		gap: .5em;
+		margin-top: .5em;
+		>.divider{
+			background: rgba(200, 200, 200, .5);
+			border-radius: 1em;
+			flex: none;
+			height: .15em;
+			margin: .25em 0;
+			width: 100%;
+		}
+		>.tile{
+			background: rgba(200, 200, 200, .3);
+			border-radius: .75em;
+			cursor: pointer;
+			flex: none;
+			height: 12em;
+			max-width: 100%;
+			overflow: hidden;
+			&:hover{
+				background: rgba(200, 200, 200, .5);
+				border-radius: 1em;
+			}
+			>img{
+				display: block;
+				height: 100%;
+				object-fit: cover;
+				width: 100%;
+			}
+		}
 	}
 	dialog{
 		backdrop-filter: blur(16px) saturate(.75);
@@ -367,8 +504,19 @@ body{
 		scale: .95;
 		transition: display .25s allow-discrete, overlay .25s allow-discrete, opacity .25s, scale .25s;
 		&#dateDialog,
-		&#nameDialog{
+		&#nameDialog,
+		&#photoDialog{
 			width: min(24em, calc(100vw - 2em));
+		}
+		&#orphanDialog{
+			width: min(60em, calc(100vw - 2em));
+		}
+		&#imageDialog{
+			height: calc(100dvh - 2em);
+			width: calc(100vw - 2em);
+			>form{
+				min-height: 100%;
+			}
 		}
 		&[open]{
 			opacity: 1;
@@ -396,6 +544,124 @@ body{
 			gap: .5em;
 			>.title{
 				font-weight: bold;
+			}
+			>.picture{
+				background: rgba(200, 200, 200, .3);
+				border-radius: .75em;
+				flex: 1;
+				min-height: 10em;
+				overflow: hidden;
+				position: relative;
+				>.frame{
+					height: 100%;
+					left: 0;
+					position: absolute;
+					top: 0;
+					width: 100%;
+					>img{
+						height: 100%;
+						object-fit: contain;
+						width: 100%;
+					}
+				}
+				>button{
+					backdrop-filter: blur(12px) saturate(.75);
+					background: rgba(200, 200, 200, .3);
+					border: none;
+					border-radius: .75em;
+					cursor: pointer;
+					font: inherit;
+					font-size: 1.5em;
+					height: 2em;
+					line-height: 1;
+					padding: 0;
+					position: absolute;
+					top: 50%;
+					translate: 0 -50%;
+					width: 1.5em;
+					&.previous{
+						left: .5em;
+					}
+					&.next{
+						right: .5em;
+					}
+					&:hover{
+						background: rgba(200, 200, 200, .5);
+						border-radius: 1em;
+					}
+				}
+				>.counter{
+					backdrop-filter: blur(12px) saturate(.75);
+					background: rgba(200, 200, 200, .3);
+					border-radius: 1em;
+					bottom: .5em;
+					color: grey;
+					font-size: .8em;
+					left: 50%;
+					padding: .1em .75em;
+					position: absolute;
+					translate: -50% 0;
+					user-select: none;
+					&:empty{
+						display: none;
+					}
+				}
+			}
+			>.cropper{
+				background: rgba(200, 200, 200, .3);
+				border-radius: .75em;
+				margin: 0 auto;
+				overflow: hidden;
+				position: relative;
+				touch-action: none;
+				user-select: none;
+				width: 100%;
+				&.empty{
+					aspect-ratio: 1;
+					cursor: pointer;
+					&:before,
+					&:after{
+						background: grey;
+						border-radius: 1em;
+						content: '';
+						height: .2em;
+						left: 50%;
+						position: absolute;
+						top: 50%;
+						translate: -50% -50%;
+						width: 3em;
+					}
+					&:after{
+						rotate: 90deg;
+					}
+				}
+				>img{
+					display: block;
+					height: 100%;
+					pointer-events: none;
+					transition: none;
+					width: 100%;
+					&[hidden]{
+						display: none;
+					}
+				}
+				>.frame{
+					border-radius: 12.5%;
+					box-shadow: inset 0 0 0 .1em rgba(255, 255, 255, .8), 0 0 0 100vmax rgba(0, 0, 0, .5);
+					cursor: grab;
+					position: absolute;
+					transition: none;
+					&[hidden]{
+						display: none;
+					}
+				}
+			}
+			>.notice{
+				color: grey;
+				font-size: .8em;
+				&:empty{
+					display: none;
+				}
 			}
 			>.tabs{
 				display: flex;
@@ -464,6 +730,9 @@ body{
 				gap: .25em;
 				&:empty{
 					display: none;
+				}
+				&.people>.entry{
+					cursor: default;
 				}
 				>.heading{
 					align-items: baseline;
@@ -588,12 +857,14 @@ body{
 				}
 			}
 			input,
-			select{
+			select,
+			textarea{
 				background: rgba(200, 200, 200, .3);
 				border: none;
 				border-radius: .75em;
 				font: inherit;
 				padding: .5em 1em;
+				resize: none;
 				&:focus{
 					background: rgba(200, 200, 200, .5);
 					border-radius: 1em;
@@ -610,6 +881,13 @@ body{
 					cursor: pointer;
 					font: inherit;
 					padding: .5em 1em;
+					&.choose,
+					&.delete{
+						margin-right: auto;
+					}
+					&.delete:hover{
+						color: red;
+					}
 					&:hover{
 						background: rgba(200, 200, 200, .5);
 						border-radius: 1em;
