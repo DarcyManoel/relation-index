@@ -22,7 +22,13 @@
 				</div>
 			</div>
 			<!-- right align -->
-			<div></div>
+			<div>
+				<div id="import" onclick="chooseImportFile()"><div class="pill"><span class="label">Import</span><span class="icon"></span></div></div>
+				<div id="export" onclick="exportData()"><div class="pill"><span class="label">Export</span><span class="icon"></span></div></div>
+				<div id="exportSize"></div>
+				<div id="exportNote"></div>
+				<input id="importInput" type="file" accept=".zip" hidden onchange="readImportFile(event)">
+			</div>
 		</div>
 		<div id="profile">
 			<div id="header">
@@ -134,6 +140,25 @@
 				<div id="orphanTiles"></div>
 				<div class="buttons">
 					<button type="button" onclick="closeOrphanFolder()">Close</button>
+				</div>
+			</form>
+		</dialog>
+		<dialog id="importDialog" onclose="releaseImport()" oncancel="handleImportCancel(event)">
+			<form onsubmit="event.preventDefault()">
+				<div class="title" id="importTitle"></div>
+				<div class="notice" id="importMessage"></div>
+				<div class="summary" id="importSummary"></div>
+				<div class="compare" id="importCompare"></div>
+				<label class="checkbox" id="importApplyAllLabel" hidden><input id="importApplyAll" type="checkbox">Apply to all remaining conflicts</label>
+				<div class="issue" id="importIssue"></div>
+				<div class="buttons">
+					<button type="button" id="importCancel" onclick="closeImportDialog()">Cancel</button>
+					<button type="button" id="importKeepCurrent" onclick="chooseImportResolution(`keep`)" hidden>Keep current</button>
+					<button type="button" id="importKeepBoth" onclick="chooseImportResolution(`duplicate`)" hidden>Keep both</button>
+					<button type="button" id="importReplacePerson" onclick="chooseImportResolution(`replace`)" hidden>Replace</button>
+					<button type="button" id="importMerge" onclick="chooseImportMode(`merge`)" hidden>Merge</button>
+					<button type="button" class="replace" id="importReplace" onclick="chooseImportMode(`replace`)" hidden>Replace</button>
+					<button type="button" id="importClose" onclick="closeImportDialog()" hidden>Close</button>
 				</div>
 			</form>
 		</dialog>

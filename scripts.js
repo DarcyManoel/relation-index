@@ -6,11 +6,23 @@ let activeHistory = (JSON.parse(localStorage.getItem(`activeHistory`)) || []).fi
 // The details of every image, keyed by image id, each is { widthPx, heightPx, date, note, people }, date is null or { day, month, year } with null for unknown parts, note is null or text, and people lists everyone in the image as { personId } for someone in the database or { text } for someone written in plain text, an image is shown in the gallery of every person it lists, the pixels are not here, they are in IndexedDB
 let images = JSON.parse(localStorage.getItem(`images`)) || {}
 
+// What the note under the Export button needs, when the last export was and how many changes were made since, it is kept in the browser so it survives closing the page, savedDataText is the people and images as they were at the last save, so the next save can tell whether anything changed
+let exportState = JSON.parse(localStorage.getItem(`exportState`)) || {
+	exportedAt : null,
+	changeCount : 0
+}
+let savedDataText = null
+let savedImageIds = new Set()
+let exportWarningChangeCount = 20
+
 // Everything that has to survive a refresh is written here
 function saveData() {
 	localStorage.setItem(`persons`, JSON.stringify(persons))
 	localStorage.setItem(`images`, JSON.stringify(images))
 	localStorage.setItem(`activeHistory`, JSON.stringify(activeHistory))
+
+	countChangesSinceLastSave()
+	scheduleExportSizeUpdate()
 }
 
 // Names are typed by the user and end up inside innerHTML, so markup characters are escaped first
@@ -2548,7 +2560,1302 @@ function saveName(event) {
 	viewPerson()
 }
 
+// Export and import move everything in one zip file, data.json holds the people, the images and the history, and originals/ holds every original picture exactly as stored, named by date as described at buildOriginalFileNames, previews and thumbnails are left out because they can be made again from the originals, so the file stays small, zip is written and read here by hand so the page needs no library, only the STORE method (no compression) is used because photos are already compressed, so it is instant and the pictures are never copied into memory, every file is described twice, by a local header in front of its data and by an entry in the central directory at the end, and all numbers are little endian
+let zipSignatures = {
+	localHeader : 0x04034b50,
+	centralEntry : 0x02014b50,
+	endOfDirectory : 0x06054b50
+}
+let zipLimitBytes = 0xFFFFFFFF
+let crcTable = null
+let isExporting = false
+let exportSizeTimer = null
+let exportSizeRunId = 0
+
+// The type a file name says, for a picture whose first bytes are not recognised here, an older export has no extension and then the type stays unknown
+function getTypeFromExtension(name) {
+	let extension = name.includes(`.`) ? name.split(`.`).at(-1).toLowerCase() : ``
+
+	return Object.keys(imageTypeExtensions).find((type) => imageTypeExtensions[type] == extension) ?? ``
+}
+
+// The checksum every zip file entry carries, it is how a damaged file is noticed, the table is made on first use
+function getCrcTable() {
+	if(!crcTable){
+		crcTable = new Uint32Array(256)
+
+		for(let index = 0; index < 256; index++){
+			let value = index
+
+			for(let bit = 0; bit < 8; bit++){
+				value = value & 1 ? 0xEDB88320 ^ (value >>> 1) : value >>> 1
+			}
+
+			crcTable[index] = value >>> 0
+		}
+	}
+
+	return crcTable
+}
+
+function computeCrc32(bytes) {
+	let table = getCrcTable()
+	let crc = 0xFFFFFFFF
+
+	for(let index = 0; index < bytes.length; index++){
+		crc = table[(crc ^ bytes[index]) & 0xFF] ^ (crc >>> 8)
+	}
+
+	return (crc ^ 0xFFFFFFFF) >>> 0
+}
+
+// Zip stores times as two 16 bit numbers, seconds are kept in steps of two and years count from 1980
+function getDosDateTime(date) {
+	return {
+		time : (date.getHours() << 11) | (date.getMinutes() << 5) | (date.getSeconds() >> 1),
+		date : ((Math.max(date.getFullYear(), 1980) - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate()
+	}
+}
+
+// Each entry is { name, blob }, the checksum needs the bytes of every file, so each one is read in turn and let go again, while the file itself goes into the zip as the blob it already is, so the zip is built from references and not from copies, file names are written as UTF-8 and the flag at bit 11 says so, a zip this simple cannot hold more than 65535 files or 4 GB, because that needs the zip64 extension, so that is reported instead of writing a file that cannot be read back
+async function buildZipBlob(entries, reportProgress) {
+	let encoder = new TextEncoder()
+	let dosDateTime = getDosDateTime(new Date())
+	let parts = []
+	let centralParts = []
+	let offsetBytes = 0
+
+	if(entries.length > 0xFFFF){
+		throw new Error(`There are too many files for a zip file.`)
+	}
+
+	for(let [index, entry] of entries.entries()){
+		let nameBytes = encoder.encode(entry.name)
+		let crc = computeCrc32(new Uint8Array(await entry.blob.arrayBuffer()))
+
+		if(offsetBytes + 30 + nameBytes.length + entry.blob.size > zipLimitBytes){
+			throw new Error(`The export is larger than 4 GB, which this zip writer cannot hold.`)
+		}
+
+		let localHeader = new DataView(new ArrayBuffer(30))
+
+		localHeader.setUint32(0, zipSignatures.localHeader, true)
+		localHeader.setUint16(4, 20, true)
+		localHeader.setUint16(6, 0x0800, true)
+		localHeader.setUint16(8, 0, true)
+		localHeader.setUint16(10, dosDateTime.time, true)
+		localHeader.setUint16(12, dosDateTime.date, true)
+		localHeader.setUint32(14, crc, true)
+		localHeader.setUint32(18, entry.blob.size, true)
+		localHeader.setUint32(22, entry.blob.size, true)
+		localHeader.setUint16(26, nameBytes.length, true)
+		localHeader.setUint16(28, 0, true)
+
+		let centralHeader = new DataView(new ArrayBuffer(46))
+
+		centralHeader.setUint32(0, zipSignatures.centralEntry, true)
+		centralHeader.setUint16(4, 20, true)
+		centralHeader.setUint16(6, 20, true)
+		centralHeader.setUint16(8, 0x0800, true)
+		centralHeader.setUint16(10, 0, true)
+		centralHeader.setUint16(12, dosDateTime.time, true)
+		centralHeader.setUint16(14, dosDateTime.date, true)
+		centralHeader.setUint32(16, crc, true)
+		centralHeader.setUint32(20, entry.blob.size, true)
+		centralHeader.setUint32(24, entry.blob.size, true)
+		centralHeader.setUint16(28, nameBytes.length, true)
+		centralHeader.setUint16(30, 0, true)
+		centralHeader.setUint16(32, 0, true)
+		centralHeader.setUint16(34, 0, true)
+		centralHeader.setUint16(36, 0, true)
+		centralHeader.setUint32(38, 0, true)
+		centralHeader.setUint32(42, offsetBytes, true)
+
+		parts.push(localHeader.buffer, nameBytes, entry.blob)
+		centralParts.push(centralHeader.buffer, nameBytes)
+
+		offsetBytes += 30 + nameBytes.length + entry.blob.size
+
+		reportProgress?.(index + 1, entries.length)
+	}
+
+	let directoryBytes = centralParts.reduce((total, part) => total + part.byteLength, 0)
+
+	if(offsetBytes + directoryBytes > zipLimitBytes){
+		throw new Error(`The export is larger than 4 GB, which this zip writer cannot hold.`)
+	}
+
+	let endRecord = new DataView(new ArrayBuffer(22))
+
+	endRecord.setUint32(0, zipSignatures.endOfDirectory, true)
+	endRecord.setUint16(4, 0, true)
+	endRecord.setUint16(6, 0, true)
+	endRecord.setUint16(8, entries.length, true)
+	endRecord.setUint16(10, entries.length, true)
+	endRecord.setUint32(12, directoryBytes, true)
+	endRecord.setUint32(16, offsetBytes, true)
+	endRecord.setUint16(20, 0, true)
+
+	return new Blob([...parts, ...centralParts, endRecord.buffer], { type : `application/zip` })
+}
+
+// The central directory is found from the end of the file, the end record is the last 22 bytes unless a comment follows it, so it is looked for backwards through the last 64 KB, and only the directory is read here, the files themselves are not touched until they are needed, a zip that needs zip64 is refused, because it was not written by Export
+async function readZipEntries(file) {
+	if(file.size < 22){
+		throw new Error(`This file is too small to be a zip file.`)
+	}
+
+	let tailBytes = Math.min(file.size, 22 + 0xFFFF)
+	let tail = new DataView(await file.slice(file.size - tailBytes, file.size).arrayBuffer())
+	let endIndex = -1
+
+	for(let index = tail.byteLength - 22; index >= 0; index--){
+		if(tail.getUint32(index, true) == zipSignatures.endOfDirectory){
+			endIndex = index
+
+			break
+		}
+	}
+
+	if(endIndex == -1){
+		throw new Error(`This is not a zip file, or it is damaged.`)
+	}
+
+	let entryCount = tail.getUint16(endIndex + 10, true)
+	let directoryBytes = tail.getUint32(endIndex + 12, true)
+	let directoryOffset = tail.getUint32(endIndex + 16, true)
+
+	if(entryCount == 0xFFFF || directoryBytes == 0xFFFFFFFF || directoryOffset == 0xFFFFFFFF){
+		throw new Error(`This zip file uses zip64, which is not supported.`)
+	}
+
+	if(directoryOffset + directoryBytes > file.size){
+		throw new Error(`This zip file is damaged, its directory is outside the file.`)
+	}
+
+	let directory = new DataView(await file.slice(directoryOffset, directoryOffset + directoryBytes).arrayBuffer())
+	let entries = new Map()
+	let position = 0
+
+	for(let counter = 0; counter < entryCount; counter++){
+		if(position + 46 > directory.byteLength || directory.getUint32(position, true) != zipSignatures.centralEntry){
+			throw new Error(`This zip file is damaged, its directory cannot be read.`)
+		}
+
+		let nameLength = directory.getUint16(position + 28, true)
+		let name = new TextDecoder().decode(new Uint8Array(directory.buffer, position + 46, nameLength))
+
+		entries.set(name, {
+			name : name,
+			method : directory.getUint16(position + 10, true),
+			crc : directory.getUint32(position + 16, true),
+			sizeBytes : directory.getUint32(position + 24, true),
+			headerOffset : directory.getUint32(position + 42, true)
+		})
+
+		position += 46 + nameLength + directory.getUint16(position + 30, true) + directory.getUint16(position + 32, true)
+	}
+
+	return entries
+}
+
+// The data of one entry as a blob that points into the file without copying it, the local header is read to find where the data starts because its name and extra field can be a different length from the ones in the directory, a compressed entry is refused because only files written by Export are expected
+async function getZipEntryBlob(file, entry) {
+	if(entry.method != 0){
+		throw new Error(`${entry.name} is compressed, and only a zip file written by Export can be imported.`)
+	}
+
+	let header = new DataView(await file.slice(entry.headerOffset, entry.headerOffset + 30).arrayBuffer())
+
+	if(header.byteLength < 30 || header.getUint32(0, true) != zipSignatures.localHeader){
+		throw new Error(`This zip file is damaged, ${entry.name} cannot be found.`)
+	}
+
+	let startOffset = entry.headerOffset + 30 + header.getUint16(26, true) + header.getUint16(28, true)
+
+	if(startOffset + entry.sizeBytes > file.size){
+		throw new Error(`This zip file is damaged, ${entry.name} is cut short.`)
+	}
+
+	return file.slice(startOffset, startOffset + entry.sizeBytes)
+}
+
+// The pictures in the zip have real file names with an extension, so they open straight from the zip in any file manager or viewer, the extension comes from the type the original was stored with, and a type that is not known here is worked out from the first bytes, a picture that is still not recognised gets .bin, because a wrong extension is worse than none
+let imageTypeExtensions = {
+	[`image/jpeg`] : `jpg`,
+	[`image/png`] : `png`,
+	[`image/gif`] : `gif`,
+	[`image/webp`] : `webp`,
+	[`image/heic`] : `heic`,
+	[`image/heif`] : `heif`,
+	[`image/avif`] : `avif`,
+	[`image/bmp`] : `bmp`,
+	[`image/tiff`] : `tif`,
+	[`image/svg+xml`] : `svg`
+}
+
+// Zip does not remember what kind of file an original was, and the pictures need a type to be stored as they were, so it is read from the first bytes, the browser does not need it to show a picture, this only keeps what is stored the same as before
+function guessImageType(bytes) {
+	let readText = (from, to) => String.fromCharCode(...bytes.slice(from, to))
+
+	if(bytes[0] == 0xFF && bytes[1] == 0xD8){
+		return `image/jpeg`
+	}
+
+	if(bytes[0] == 0x89 && readText(1, 4) == `PNG`){
+		return `image/png`
+	}
+
+	if(readText(0, 3) == `GIF`){
+		return `image/gif`
+	}
+
+	if(readText(0, 4) == `RIFF` && readText(8, 12) == `WEBP`){
+		return `image/webp`
+	}
+
+	if(readText(4, 8) == `ftyp`){
+		if([`heic`, `heix`, `hevc`, `heim`, `heis`, `mif1`, `msf1`].includes(readText(8, 12))){
+			return `image/heic`
+		}
+
+		if([`avif`, `avis`].includes(readText(8, 12))){
+			return `image/avif`
+		}
+	}
+
+	return ``
+}
+
+// The extension of an original, only the first bytes are read, and only when the stored type is missing or unknown
+async function getOriginalExtension(blob) {
+	let type = imageTypeExtensions[blob.type] ? blob.type : guessImageType(new Uint8Array(await blob.slice(0, 16).arrayBuffer()))
+
+	return imageTypeExtensions[type] ?? `bin`
+}
+
+// A date as YYYYMMDD with 00 for a part that is not known, so a year alone is 20210000, and files sort by date in any file manager
+function buildDateFileKey(date) {
+	return `${`${date.year ?? 0}`.padStart(4, `0`)}${`${date.month ?? 0}`.padStart(2, `0`)}${`${date.day ?? 0}`.padStart(2, `0`)}`
+}
+
+// The name of every original inside the zip, an image with a date is named by its date, a space and a number that counts the images with that same date from 1, as 20200510 1 and 20200510 2, and an image with no date is named by a number counting the undated images from 1, as 1 and 2, the numbers follow the image ids, so the same data always gives the same names, an original with no details in images counts as undated, these names say nothing about which image is which to the import, so data.json lists the name of every image, which is what the import goes by
+async function buildOriginalFileNames(entries) {
+	let counters = new Map()
+	let names = new Map()
+
+	for(let entry of [...entries].sort((firstEntry, secondEntry) => firstEntry.imageId - secondEntry.imageId)){
+		let date = images[entry.imageId]?.date
+		let key = date ? buildDateFileKey(date) : ``
+		let number = (counters.get(key) ?? 0) + 1
+
+		counters.set(key, number)
+		names.set(entry.imageId, `originals/${key == `` ? `` : `${key} `}${number}.${await getOriginalExtension(entry.blob)}`)
+	}
+
+	return names
+}
+
+// Every original in the database with its image id, the blobs are only handles, so reading them costs nothing and their size is known without reading their content, runImageTransaction returns the result of the request that is handed back, so a small object whose result is worked out when the transaction completes is handed back, because two requests are needed here
+function loadOriginalEntries() {
+	return runImageTransaction(`originals`, `readonly`, (transaction) => {
+		let store = transaction.objectStore(`originals`)
+		let keysRequest = store.getAllKeys()
+		let blobsRequest = store.getAll()
+
+		return {
+			get result() {
+				return keysRequest.result.map((imageId, index) => ({
+					imageId : imageId,
+					blob : blobsRequest.result[index]
+				}))
+			}
+		}
+	})
+}
+
+function saveOriginalBlob(imageId, blob) {
+	return runImageTransaction(`originals`, `readwrite`, (transaction) => transaction.objectStore(`originals`).put(blob, imageId))
+}
+
+// Replacing everything starts from empty stores, so no picture of the old data can end up under an id of the new data
+function clearImageStores() {
+	return runImageTransaction([`originals`, `previews`, `thumbnails`], `readwrite`, (transaction) => {
+		transaction.objectStore(`originals`).clear()
+		transaction.objectStore(`previews`).clear()
+
+		return transaction.objectStore(`thumbnails`).clear()
+	})
+}
+
+// The same data is used for the file and for the size estimate, so the estimate is the size of what would be written, files says which file in the zip holds the original of which image
+function buildExportData(fileNames) {
+	return {
+		version : 1,
+		exportedAt : new Date().toISOString(),
+		persons : persons,
+		images : images,
+		activeHistory : activeHistory,
+		files : Object.fromEntries(fileNames)
+	}
+}
+
+// Decimal units, the same as the ones the system shows for files
+function formatByteSize(bytes) {
+	if(bytes < 1000){
+		return `${bytes} B`
+	}
+
+	if(bytes < 1000000){
+		return `${Math.round(bytes / 1000)} KB`
+	}
+
+	if(bytes < 1000000000){
+		return `${(bytes / 1000000).toFixed(1)} MB`
+	}
+
+	return `${(bytes / 1000000000).toFixed(2)} GB`
+}
+
+// The size of the zip Export would write, the data, every original and the zip headers, which are 30 and 46 bytes per file plus the file name twice and a 22 byte end record, it is shown in the tooltip of the Export button, it is only worked out a moment after the last change because saving happens often and every original has to be listed
+function scheduleExportSizeUpdate() {
+	clearTimeout(exportSizeTimer)
+
+	exportSizeTimer = setTimeout(updateExportSize, 400)
+}
+
+async function updateExportSize() {
+	exportSizeRunId += 1
+
+	let runId = exportSizeRunId
+	let encoder = new TextEncoder()
+
+	try {
+		let entries = await loadOriginalEntries()
+		let fileNames = await buildOriginalFileNames(entries)
+		let names = [`data.json`, ...fileNames.values()]
+		let totalBytes = new Blob([JSON.stringify(buildExportData(fileNames))]).size
+			+ entries.reduce((total, entry) => total + entry.blob.size, 0)
+			+ names.reduce((total, name) => total + 76 + 2 * encoder.encode(name).length, 22)
+
+		if(runId === exportSizeRunId){
+			document.getElementById(`exportSize`).textContent = `~${formatByteSize(totalBytes)}`
+		}
+	} catch {
+		if(runId === exportSizeRunId){
+			document.getElementById(`exportSize`).textContent = ``
+		}
+	}
+}
+
+// The browser is asked to save the zip as a download, the temporary address is released afterwards, but not at once because some browsers start reading it a moment after the click
+function downloadBlob(blob, fileName) {
+	let url = URL.createObjectURL(blob)
+	let link = document.createElement(`a`)
+
+	link.href = url
+	link.download = fileName
+
+	link.click()
+
+	setTimeout(() => URL.revokeObjectURL(url), 10000)
+}
+
+// While the zip is being built the button is marked busy and a second click is ignored, so two zips are never built at the same time
+async function exportData() {
+	if(isExporting){
+		return
+	}
+
+	isExporting = true
+
+	document.getElementById(`export`).classList.add(`busy`)
+
+	try {
+		let originalEntries = await loadOriginalEntries()
+		let fileNames = await buildOriginalFileNames(originalEntries)
+		let entries = [
+			{
+				name : `data.json`,
+				blob : new Blob([JSON.stringify(buildExportData(fileNames))], { type : `application/json` })
+			},
+			...originalEntries.map((entry) => ({
+				name : fileNames.get(entry.imageId),
+				blob : entry.blob
+			}))
+		]
+		let today = new Date()
+
+		downloadBlob(await buildZipBlob(entries), `relation-index-${today.getFullYear()}-${`${today.getMonth() + 1}`.padStart(2, `0`)}-${`${today.getDate()}`.padStart(2, `0`)}.zip`)
+
+		markExported(today.toISOString())
+	} catch(error) {
+		window.alert(`The export could not be made. ${error.message}`)
+	}
+
+	isExporting = false
+
+	document.getElementById(`export`).classList.remove(`busy`)
+}
+
+// What was read from the zip file and checked, nothing in the page is changed until this is complete, so a damaged file never does harm, originals maps each image id to its picture, and missingImageIds are images the file lists but holds no picture for, which can be, for example, when the browser lost its pictures before the export was made
+let importPlan = null
+let importCheckToken = 0
+let isImporting = false
+
+function isPlainObject(value) {
+	return value !== null && typeof value == `object` && !Array.isArray(value)
+}
+
+// The checks are about the shape only, enough that the rest of the page can be trusted not to break on what is imported, older forms of names and dates are fine because they are converted afterwards
+function validateImportData(data) {
+	if(!isPlainObject(data)){
+		throw new Error(`data.json does not hold the data it should.`)
+	}
+
+	if(data.version !== 1){
+		throw new Error(`This file was made by a different version of Relation Index (version ${data.version}).`)
+	}
+
+	if(!isPlainObject(data.persons) || !isPlainObject(data.images)){
+		throw new Error(`data.json does not hold the people and images it should.`)
+	}
+
+	for(let [personId, person] of Object.entries(data.persons)){
+		if(!/^\d+$/.test(personId) || !isPlainObject(person)){
+			throw new Error(`Person ${personId} in data.json is not valid.`)
+		}
+	}
+
+	if(data.files !== undefined && (!isPlainObject(data.files) || !Object.entries(data.files).every(([imageId, name]) => /^\d+$/.test(imageId) && typeof name == `string`))){
+		throw new Error(`The list of picture files in data.json is not valid.`)
+	}
+
+	for(let [imageId, image] of Object.entries(data.images)){
+		if(!/^\d+$/.test(imageId) || !isPlainObject(image) || !Array.isArray(image.people) || !image.people.every(isPlainObject) || !(image.widthPx > 0) || !(image.heightPx > 0)){
+			throw new Error(`Image ${imageId} in data.json is not valid.`)
+		}
+	}
+}
+
+// Reads the whole file once, the directory, data.json and the checksum of every original, nothing is stored, the pictures are only pointed at, so this can be done for a file of many gigabytes, a null result means the check was cancelled
+async function buildImportPlan(file, reportProgress, isCancelled) {
+	let entries = await readZipEntries(file)
+	let dataEntry = entries.get(`data.json`)
+
+	if(!dataEntry){
+		throw new Error(`This is not a Relation Index export, data.json is missing.`)
+	}
+
+	let dataBytes = new Uint8Array(await (await getZipEntryBlob(file, dataEntry)).arrayBuffer())
+
+	if(computeCrc32(dataBytes) !== dataEntry.crc){
+		throw new Error(`data.json is damaged, its checksum does not match.`)
+	}
+
+	let data
+
+	try {
+		data = JSON.parse(new TextDecoder().decode(dataBytes))
+	} catch {
+		throw new Error(`data.json could not be read, it is not valid JSON.`)
+	}
+
+	validateImportData(data)
+
+	let originals = new Map()
+	let fileNames = new Map()
+
+	// data.json says which file holds which image, an export made before that list existed has files called originals/{imageId} with or without an extension
+	if(data.files){
+		Object.entries(data.files).forEach(([imageId, name]) => fileNames.set(Number(imageId), name))
+	} else {
+		[...entries.values()]
+			.filter((entry) => /^originals\/\d+(\.[A-Za-z0-9]+)?$/.test(entry.name))
+			.forEach((entry) => fileNames.set(parseInt(entry.name.split(`/`)[1], 10), entry.name))
+	}
+
+	let listedFiles = [...fileNames.entries()].filter(([imageId, name]) => entries.has(name))
+
+	for(let [index, [imageId, name]] of listedFiles.entries()){
+		if(isCancelled()){
+			return null
+		}
+
+		reportProgress(index + 1, listedFiles.length)
+
+		let entry = entries.get(name)
+		let blob = await getZipEntryBlob(file, entry)
+		let bytes = new Uint8Array(await blob.arrayBuffer())
+
+		if(computeCrc32(bytes) !== entry.crc){
+			throw new Error(`${entry.name} is damaged, its checksum does not match.`)
+		}
+
+		originals.set(imageId, blob.slice(0, blob.size, guessImageType(bytes) || getTypeFromExtension(entry.name)))
+	}
+
+	return {
+		persons : data.persons,
+		images : data.images,
+		activeHistory : Array.isArray(data.activeHistory) ? data.activeHistory : [],
+		exportedAt : data.exportedAt,
+		originals : originals,
+		missingImageIds : Object.keys(data.images).map(Number).filter((imageId) => !originals.has(imageId))
+	}
+}
+
+// Names are compared without case, accents and extra spaces, so Zoe and ZOË match
+function normalizeNameText(text) {
+	return `${text ?? ``}`.normalize(`NFD`).replace(/[\u0300-\u036f]/g, ``).toLowerCase().replace(/\s+/g, ` `).trim()
+}
+
+// A person saved before names were lists still has firstName and lastName on the person itself, so both forms are understood
+function getPersonNameEntries(person) {
+	if(Array.isArray(person.names?.variants)){
+		return person.names.variants
+	}
+
+	return person.firstName || person.lastName ? [person] : []
+}
+
+function getPersonNameKeys(person) {
+	return new Set(getPersonNameEntries(person).map((entry) => normalizeNameText(`${entry.firstName ?? ``} ${entry.lastName ?? ``}`)).filter((key) => key != ``))
+}
+
+// Every year entered for a birth or a death, a date saved before dates were lists is one date on the person
+function getPersonYears(person, kind) {
+	let source = person[kind]
+	let variants = Array.isArray(source?.variants) ? source.variants : source ? [source] : []
+
+	return new Set(variants.map((variant) => variant.year).filter((year) => year != null))
+}
+
+// Two people are compared by their years only when both have one, if they share a year they agree, if not they disagree, and if either has none nothing can be said
+function compareYears(existingYears, importedYears) {
+	if(existingYears.size == 0 || importedYears.size == 0){
+		return `unknown`
+	}
+
+	return [...importedYears].some((year) => existingYears.has(year)) ? `same` : `differs`
+}
+
+function getImportedPersonLabel(person) {
+	let nameEntry = Array.isArray(person.names?.variants) ? (person.names.variants[person.names.preferredVariantIndex] ?? person.names.variants[0]) : person
+	let text = formatNameText(nameEntry ?? {})
+
+	return text == `` ? `Unnamed` : text
+}
+
+// A person in the file is a possible duplicate when any of their names matches any name of a person already here, the birth and death years are then compared to say how likely it is, this only warns, Merge never joins people, because two people can share a name
+function findImportConflicts(importedPersons) {
+	let existingByKey = new Map()
+	let conflicts = []
+
+	for(let [personId, person] of Object.entries(persons)){
+		for(let key of getPersonNameKeys(person)){
+			existingByKey.set(key, [...(existingByKey.get(key) ?? []), Number(personId)])
+		}
+	}
+
+	for(let [importedId, importedPerson] of Object.entries(importedPersons)){
+		let existingIds = [...new Set([...getPersonNameKeys(importedPerson)].flatMap((key) => existingByKey.get(key) ?? []))]
+
+		if(existingIds.length == 0){
+			continue
+		}
+
+		let comparisons = existingIds.map((existingId) => ({
+			existingId : existingId,
+			birth : compareYears(getPersonYears(persons[existingId], `birth`), getPersonYears(importedPerson, `birth`)),
+			death : compareYears(getPersonYears(persons[existingId], `death`), getPersonYears(importedPerson, `death`))
+		}))
+		let bestComparison = comparisons.find((comparison) => comparison.birth != `differs` && comparison.death != `differs`) ?? comparisons[0]
+
+		conflicts.push({
+			importedId : Number(importedId),
+			existingId : bestComparison.existingId,
+			label : getImportedPersonLabel(importedPerson),
+			birth : bestComparison.birth,
+			death : bestComparison.death
+		})
+	}
+
+	return conflicts
+}
+
+function describeConflict(conflict) {
+	let notes = []
+
+	for(let [kind, result] of [[`birth`, conflict.birth], [`death`, conflict.death]]){
+		if(result == `same`){
+			notes.push(`same ${kind} year`)
+		} else if(result == `differs`){
+			notes.push(`${kind} year differs`)
+		}
+	}
+
+	return `${conflict.label} \u2014 ${notes.length == 0 ? `no birth or death year to compare` : notes.join(`, `)}`
+}
+
+function describeCount(count, singular, plural) {
+	return `${count} ${count == 1 ? singular : plural}`
+}
+
+// What the dialog shows when the browser already holds data, the counts on both sides, the possible duplicates with a few examples, and what each button does
+function buildImportSummaryHtml(plan, conflicts) {
+	let exportedDate = new Date(plan.exportedAt)
+	let rows = [
+		`<div>In the file: ${describeCount(Object.keys(plan.persons).length, `person`, `people`)}, ${describeCount(Object.keys(plan.images).length, `image`, `images`)}</div>`,
+		`<div>In this browser: ${describeCount(Object.keys(persons).length, `person`, `people`)}, ${describeCount(Object.keys(images).length, `image`, `images`)}</div>`
+	]
+
+	if(!isNaN(exportedDate)){
+		rows.push(`<div class="fine">The file was made on ${exportedDate.getDate()} ${monthNames[exportedDate.getMonth()]} ${exportedDate.getFullYear()}</div>`)
+	}
+
+	if(conflicts.length == 0){
+		rows.push(`<div>No person in the file has the same name as a person here.</div>`)
+	} else {
+		rows.push(`<div>${describeCount(conflicts.length, `person in the file has`, `people in the file have`)} the same name as ${conflicts.length == 1 ? `a person` : `people`} here:</div>`)
+
+		conflicts.slice(0, 3).forEach((conflict) => rows.push(`<div class="fine">${escapeHtml(describeConflict(conflict))}</div>`))
+
+		if(conflicts.length > 3){
+			rows.push(`<div class="fine">and ${conflicts.length - 3} more</div>`)
+		}
+	}
+
+	rows.push(`<div class="fine">${conflicts.length == 0 ? `Merge adds everything in the file to what is here and changes nothing that is here.` : `Merge adds the rest of the file to what is here, and asks you what to do about each person who has the same name as someone here.`}</div>`)
+	rows.push(`<div class="warning">Replace deletes everything that is here first.</div>`)
+
+	return rows.join(``)
+}
+
+// How long ago the last export was, in words, a long time ago is a date, so it stays correct and short, and a clock that is a little off never gives a negative time
+function formatTimeAgo(isoText, now = new Date()) {
+	let date = new Date(isoText)
+	let minutes = Math.floor((now - date) / 60000)
+
+	if(isNaN(minutes)){
+		return ``
+	}
+
+	if(minutes < 1){
+		return `just now`
+	}
+
+	if(minutes < 60){
+		return `${minutes} min ago`
+	}
+
+	if(minutes < 1440){
+		return `${Math.floor(minutes / 60)} h ago`
+	}
+
+	if(minutes < 2880){
+		return `yesterday`
+	}
+
+	if(minutes < 43200){
+		return `${Math.floor(minutes / 1440)} days ago`
+	}
+
+	return `on ${date.getDate()} ${monthNames[date.getMonth()]} ${date.getFullYear()}`
+}
+
+// Called after every save, a change is a save that altered the people or the images, saving only the history of viewed people is not a change, and each new image counts as a change of its own, because a photo cannot be typed in again, so adding ten photos counts as eleven, the count is kept until the next export so it survives closing the page
+function countChangesSinceLastSave() {
+	let dataText = JSON.stringify([persons, images])
+	let imageIds = new Set(Object.keys(images))
+
+	if(savedDataText !== null && dataText !== savedDataText){
+		exportState.changeCount += 1 + [...imageIds].filter((imageId) => !savedImageIds.has(imageId)).length
+
+		localStorage.setItem(`exportState`, JSON.stringify(exportState))
+	}
+
+	savedDataText = dataText
+	savedImageIds = imageIds
+
+	updateExportNote()
+}
+
+// The data as it is stored at the start, so the first save after loading is compared with it and not counted as a change
+function rememberSavedData() {
+	savedDataText = JSON.stringify([persons, images])
+	savedImageIds = new Set(Object.keys(images))
+}
+
+// Remembers that an export was made at this time, or that the data now matches a file, and starts counting again from nothing
+function markExported(exportedAt) {
+	exportState = {
+		exportedAt : exportedAt,
+		changeCount : 0
+	}
+
+	localStorage.setItem(`exportState`, JSON.stringify(exportState))
+
+	updateExportNote()
+}
+
+// The note under the Export button is always there, it says when the last export was and how many changes have been made since, it is grey until exportWarningChangeCount changes pile up, and then it turns the orange used for the other notices, because that much work would be lost if the browser lost its storage, an empty browser that never exported has nothing to say
+function updateExportNote() {
+	let noteElement = document.getElementById(`exportNote`)
+	let hasData = Object.keys(persons).length > 0 || Object.keys(images).length > 0
+
+	if(!hasData && !exportState.exportedAt){
+		noteElement.textContent = ``
+
+		return
+	}
+
+	noteElement.textContent = `${exportState.exportedAt ? `Last exported ${formatTimeAgo(exportState.exportedAt)}` : `Never exported`}${exportState.changeCount > 0 ? ` \u00b7 ${describeCount(exportState.changeCount, `change`, `changes`)}` : ``}`
+	noteElement.className = exportState.changeCount >= exportWarningChangeCount ? `warning` : ``
+}
+
+// A person from the file is a copy of someone already here when the names match, Merge asks what to do about each one, the way the Finder asks about a file that already exists, the choices are to keep both, which adds the person from the file as a new person, to replace, which puts the person from the file in the place of the one here, so the details and the profile picture of the file win and everything else that points at that person still does, and to keep the current one, which changes nothing about the person but still adds the images of the one in the file to them, so no image is lost, whatever is chosen, the images of the file are always added and never overwrite an image here, the answers are kept per person of the file in importResolutions, and Apply to all uses one answer for the rest
+let importConflicts = []
+let importResolutions = {}
+let importConflictIndex = 0
+let importCompareUrls = []
+let importCompareToken = 0
+let compareGalleryCount = 4
+
+// What is shown about a person on each side, a line for each so the two sides can be compared line by line, a person is brought to the newest form first, so a person from an old file reads the same as one made today
+function buildPersonComparisonRows(person, imageCount) {
+	let born = getPreferredDate(person, `birth`)
+	let died = getDeathDate(person)
+
+	return [
+		{
+			label : `Name`,
+			text : getNameLabel(person)
+		},
+		{
+			label : `Born`,
+			text : born ? (formatDateText(born) || `?`) : `\u2014`
+		},
+		{
+			label : `Died`,
+			text : died ? (formatDateText(died) || `Deceased`) : `\u2014`
+		},
+		{
+			label : `Other names`,
+			text : `${Math.max(0, (person.names?.variants ?? []).length - 1)}`
+		},
+		{
+			label : `Images`,
+			text : `${imageCount}`
+		}
+	]
+}
+
+// Two columns, here and in the file, a picture and then a line for each detail, a line that is different on the two sides is bold, so what differs can be seen at a glance
+function buildConflictCompareHtml(existingPerson, importedPerson, existingImageCount, importedImageCount) {
+	let existingRows = buildPersonComparisonRows(existingPerson, existingImageCount)
+	let importedRows = buildPersonComparisonRows(importedPerson, importedImageCount)
+
+	return `<div class="head">Here</div><div class="head">In the file</div><div class="picture"><img id="compareHereImage" alt=""></div><div class="picture"><img id="compareFileImage" alt=""></div>${existingRows.map((existingRow, index) => {
+		let importedRow = importedRows[index]
+		let differs = existingRow.text != importedRow.text ? ` differs` : ``
+
+		return `<div class="cell${differs}"><span class="label">${existingRow.label}</span>${escapeHtml(existingRow.text)}</div><div class="cell${differs}"><span class="label">${importedRow.label}</span>${escapeHtml(importedRow.text)}</div>`
+	}).join(``)}<div class="strip" id="compareHereGallery"></div><div class="strip" id="compareFileGallery"></div>`
+}
+
+// The pictures of each side, so the two people can be compared by eye, the profile picture, and then the first few images of the gallery, the ones here are their stored previews, and the ones in the file are made small from the originals in the file, because the file holds no previews, the profile picture of the file is cut with its saved crop, a picture that arrives after the dialog moved on to the next conflict is dropped, and one that cannot be read is left out, the details are still there to compare
+async function loadImportComparePictures(conflict, importedPerson, token) {
+	let showPicture = (elementId, blob, isInStrip) => {
+		if(token !== importCompareToken || !blob){
+			return
+		}
+
+		let url = URL.createObjectURL(blob)
+
+		importCompareUrls.push(url)
+
+		if(isInStrip){
+			document.getElementById(elementId).innerHTML += `<img src="${url}" alt="">`
+		} else {
+			document.getElementById(elementId).src = url
+		}
+	}
+	let makeSmallBlob = async (originalBlob, crop) => {
+		try {
+			let bitmap = await createImageBitmap(originalBlob)
+			let smallBlob = crop ? await makeCropThumbnailBlob(bitmap, crop) : await makeScaledBlob(bitmap, 160)
+
+			bitmap.close()
+
+			return smallBlob
+		} catch {
+			return null
+		}
+	}
+
+	if(persons[conflict.existingId]?.profileImageId != null){
+		showPicture(`compareHereImage`, await loadThumbnailBlob(conflict.existingId).catch(() => null))
+	}
+
+	let profileBlob = importPlan?.originals.get(Number(importedPerson.profileImageId))
+
+	if(profileBlob){
+		showPicture(`compareFileImage`, await makeSmallBlob(profileBlob, {
+			...getDefaultCrop(),
+			...importedPerson.profileCrop
+		}))
+	}
+
+	for(let imageId of getGalleryImageIds(conflict.existingId).slice(0, compareGalleryCount)){
+		showPicture(`compareHereGallery`, await getPreviewBlob(imageId), true)
+	}
+
+	let importedImageIds = Object.keys(importPlan?.images ?? {})
+		.map(Number)
+		.filter((imageId) => importPlan.images[imageId].people.some((entry) => entry.personId === conflict.importedId))
+		.slice(0, compareGalleryCount)
+
+	for(let imageId of importedImageIds){
+		let originalBlob = importPlan?.originals.get(imageId)
+
+		if(originalBlob){
+			showPicture(`compareFileGallery`, await makeSmallBlob(originalBlob), true)
+		}
+	}
+}
+
+function releaseImportCompare() {
+	importCompareToken += 1
+
+	importCompareUrls.forEach((url) => URL.revokeObjectURL(url))
+
+	importCompareUrls = []
+}
+
+async function renderImportConflict() {
+	let conflict = importConflicts[importConflictIndex]
+	let importedPerson = prepareImportedPerson(importPlan.persons[conflict.importedId])
+	let importedImageCount = Object.values(importPlan.images).filter((image) => image.people.some((entry) => entry.personId === conflict.importedId)).length
+
+	releaseImportCompare()
+
+	let token = importCompareToken
+
+	document.getElementById(`importApplyAll`).checked = false
+
+	showImportView({
+		title : `Conflict ${importConflictIndex + 1} of ${importConflicts.length}`,
+		message : `${conflict.label} in the file has the same name as someone already here. What should happen to the one in the file?`,
+		compareHtml : buildConflictCompareHtml(persons[conflict.existingId], importedPerson, getGalleryImageIds(conflict.existingId).length, importedImageCount),
+		showApplyAll : importConflicts.length - importConflictIndex > 1,
+		buttons : [`importCancel`, `importKeepCurrent`, `importKeepBoth`, `importReplacePerson`]
+	})
+
+	await loadImportComparePictures(conflict, importedPerson, token)
+}
+
+function startImportConflictReview() {
+	importConflictIndex = 0
+	importResolutions = {}
+
+	renderImportConflict()
+}
+
+// Records the answer, for this conflict, or for this one and every one after it when Apply to all is ticked, and goes to the next conflict, after the last one the import is made
+function chooseImportResolution(kind) {
+	let lastIndex = document.getElementById(`importApplyAll`).checked ? importConflicts.length : importConflictIndex + 1
+
+	for(let index = importConflictIndex; index < lastIndex; index++){
+		importResolutions[importConflicts[index].importedId] = {
+			kind : kind,
+			existingId : importConflicts[index].existingId
+		}
+	}
+
+	importConflictIndex = lastIndex
+
+	if(importConflictIndex >= importConflicts.length){
+		applyImport(importPlan, `merge`, importResolutions)
+	} else {
+		renderImportConflict()
+	}
+}
+
+// The dialog is one place for every step, checking, choosing, saving and errors, a view says which text and which buttons to show
+function showImportView(view) {
+	document.getElementById(`importTitle`).textContent = view.title
+	document.getElementById(`importMessage`).textContent = view.message ?? ``
+	document.getElementById(`importSummary`).innerHTML = view.summaryHtml ?? ``
+	document.getElementById(`importCompare`).innerHTML = view.compareHtml ?? ``
+	document.getElementById(`importApplyAllLabel`).hidden = !view.showApplyAll
+	document.getElementById(`importIssue`).textContent = view.issue ? `\u26a0 ${view.issue}` : ``
+
+	for(let buttonId of [`importCancel`, `importMerge`, `importReplace`, `importClose`, `importKeepCurrent`, `importKeepBoth`, `importReplacePerson`]){
+		document.getElementById(buttonId).hidden = !(view.buttons ?? []).includes(buttonId)
+	}
+}
+
+function chooseImportFile() {
+	document.getElementById(`importInput`).click()
+}
+
+function readImportFile(event) {
+	let file = event.target.files[0]
+
+	event.target.value = ``
+
+	if(file){
+		startImport(file)
+	}
+}
+
+// The file is checked completely before anything else happens, an empty browser has nothing to lose or to clash with, so it is imported at once, otherwise the choice is shown, the token tells a late result that the dialog was closed meanwhile
+async function startImport(file) {
+	importCheckToken += 1
+
+	let token = importCheckToken
+
+	importPlan = null
+
+	showImportView({
+		title : `Import`,
+		message : `Checking the file\u2026`,
+		buttons : [`importCancel`]
+	})
+
+	if(!document.getElementById(`importDialog`).open){
+		document.getElementById(`importDialog`).showModal()
+	}
+
+	let plan
+
+	try {
+		plan = await buildImportPlan(file, (done, total) => {
+			if(token === importCheckToken){
+				document.getElementById(`importMessage`).textContent = `Checking image ${done} of ${total}\u2026`
+			}
+		}, () => token !== importCheckToken)
+	} catch(error) {
+		if(token === importCheckToken){
+			showImportView({
+				title : `Import failed`,
+				issue : error.message,
+				buttons : [`importClose`]
+			})
+		}
+
+		return
+	}
+
+	if(!plan || token !== importCheckToken){
+		return
+	}
+
+	importPlan = plan
+	importConflicts = findImportConflicts(plan.persons)
+
+	if(Object.keys(persons).length == 0 && Object.keys(images).length == 0){
+		await applyImport(plan, `replace`)
+
+		return
+	}
+
+	showImportView({
+		title : `Import`,
+		summaryHtml : buildImportSummaryHtml(plan, importConflicts),
+		buttons : [`importCancel`, `importMerge`, `importReplace`]
+	})
+}
+
+// Merge asks about each person who has the same name as someone here, when there is none it goes straight ahead
+function chooseImportMode(mode) {
+	if(!importPlan){
+		return
+	}
+
+	if(mode == `merge` && importConflicts.length > 0){
+		startImportConflictReview()
+
+		return
+	}
+
+	applyImport(importPlan, mode)
+}
+
+function closeImportDialog() {
+	document.getElementById(`importDialog`).close()
+}
+
+// Runs whenever the dialog closes, a check in progress is dropped
+function releaseImport() {
+	importCheckToken += 1
+	importPlan = null
+
+	releaseImportCompare()
+}
+
+// The dialog cannot be closed with Escape while the data is being written, because stopping halfway would leave a mixture
+function handleImportCancel(event) {
+	if(isImporting){
+		event.preventDefault()
+	}
+}
+
+// A person from the file in the newest form, copied so the file's own data is never changed, names and dates are converted if they were saved in an older form
+function prepareImportedPerson(importedPerson) {
+	let person = JSON.parse(JSON.stringify(importedPerson))
+
+	migrateDates(person)
+	migrateNames(person)
+
+	return person
+}
+
+// The file's people and images with new ids, personIdMap and imageIdMap say which new id each old id became, ids that are kept are mapped to themselves, so Replace and Merge share this code, references are updated in the people, the images and the history, a person kept as the one here is not written at all, only mapped to their id here so the images of the file are listed under them, a person listed in an image who is not in the file is dropped from the image, and a profile picture that is not in the file is dropped, names and dates are brought to the newest form, and thumbnailJobs lists the profile pictures to make again from their originals, because thumbnails are not exported
+function buildImportedData(plan, personIdMap, imageIdMap, keptPersonIds = new Set()) {
+	let newPersons = {}
+	let newImages = {}
+	let thumbnailJobs = []
+
+	for(let [oldPersonId, importedPerson] of Object.entries(plan.persons)){
+		if(keptPersonIds.has(oldPersonId)){
+			continue
+		}
+
+		let person = prepareImportedPerson(importedPerson)
+		let oldImageId = person.profileImageId
+
+		if(oldImageId != null && imageIdMap[oldImageId] !== undefined){
+			person.profileImageId = imageIdMap[oldImageId]
+
+			if(plan.originals.has(Number(oldImageId))){
+				thumbnailJobs.push({
+					personId : personIdMap[oldPersonId],
+					blob : plan.originals.get(Number(oldImageId)),
+					crop : {
+						...getDefaultCrop(),
+						...person.profileCrop
+					}
+				})
+			}
+		} else {
+			delete person.profileImageId
+			delete person.profileCrop
+		}
+
+		newPersons[personIdMap[oldPersonId]] = person
+	}
+
+	for(let [oldImageId, importedImage] of Object.entries(plan.images)){
+		let image = JSON.parse(JSON.stringify(importedImage))
+
+		image.people = image.people
+			.map((entry) => entry.personId === undefined ? entry : (personIdMap[entry.personId] === undefined ? null : { ...entry, personId : personIdMap[entry.personId] }))
+			.filter((entry) => entry)
+
+		newImages[imageIdMap[oldImageId]] = image
+	}
+
+	return {
+		persons : newPersons,
+		images : newImages,
+		activeHistory : plan.activeHistory.map((personId) => personIdMap[personId]).filter((personId) => personId !== undefined),
+		imageIdMap : imageIdMap,
+		thumbnailJobs : thumbnailJobs
+	}
+}
+
+function buildReplacementData(plan) {
+	let personIdMap = Object.fromEntries(Object.keys(plan.persons).map((personId) => [personId, Number(personId)]))
+	let imageIdMap = Object.fromEntries(Object.keys(plan.images).map((imageId) => [imageId, Number(imageId)]))
+
+	return buildImportedData(plan, personIdMap, imageIdMap)
+}
+
+// Every imported image gets a new id above the highest id here, so nothing that is here can be overwritten, and so does every imported person, except one the answer for was Replace or Keep current, that person takes the id of the person here, resolutions are the answers given for the people who have the same name as someone here
+function buildMergedData(plan, resolutions = {}) {
+	let nextPersonId = Math.max(0, ...Object.keys(persons).map(Number)) + 1
+	let nextImageId = Math.max(0, ...Object.keys(images).map(Number)) + 1
+	let personIdMap = {}
+	let imageIdMap = {}
+	let keptPersonIds = new Set()
+
+	for(let oldPersonId of Object.keys(plan.persons).map(Number).sort((first, second) => first - second)){
+		let resolution = resolutions[oldPersonId]
+
+		if(resolution && resolution.kind != `duplicate`){
+			personIdMap[oldPersonId] = resolution.existingId
+
+			if(resolution.kind == `keep`){
+				keptPersonIds.add(String(oldPersonId))
+			}
+		} else {
+			personIdMap[oldPersonId] = nextPersonId
+			nextPersonId += 1
+		}
+	}
+
+	for(let oldImageId of Object.keys(plan.images).map(Number).sort((first, second) => first - second)){
+		imageIdMap[oldImageId] = nextImageId
+		nextImageId += 1
+	}
+
+	return buildImportedData(plan, personIdMap, imageIdMap, keptPersonIds)
+}
+
+// Better to refuse than to run out of room halfway, the browser's own estimate is used with a margin of a tenth, Replace gets back the room of what it deletes, and when the browser gives no estimate the import goes ahead
+async function checkImportSpace(plan, mode) {
+	if(!navigator.storage?.estimate){
+		return
+	}
+
+	let estimate = await navigator.storage.estimate()
+	let neededBytes = [...plan.originals.values()].reduce((total, blob) => total + blob.size, 0)
+	let freedBytes = mode == `replace` ? (await loadOriginalEntries()).reduce((total, entry) => total + entry.blob.size, 0) : 0
+	let availableBytes = (estimate.quota - estimate.usage + freedBytes) * 0.9
+
+	if(neededBytes > availableBytes){
+		throw new Error(`There is not enough storage space for this import, it needs about ${formatByteSize(neededBytes)} and this browser has about ${formatByteSize(Math.max(0, availableBytes))} free.`)
+	}
+}
+
+// Writes the pictures of an import, the originals under their new ids, and the thumbnails of the profile pictures made from the originals and the saved crops, a thumbnail that cannot be made is counted and skipped, the square then stays empty until a picture is chosen again
+async function writeImportedPictures(plan, result, reportProgress) {
+	let originalIds = [...plan.originals.keys()].filter((oldImageId) => result.imageIdMap[oldImageId] !== undefined)
+	let failedThumbnailCount = 0
+
+	for(let [index, oldImageId] of originalIds.entries()){
+		reportProgress(`Saving image ${index + 1} of ${originalIds.length}\u2026`)
+
+		await saveOriginalBlob(result.imageIdMap[oldImageId], plan.originals.get(oldImageId))
+	}
+
+	for(let [index, job] of result.thumbnailJobs.entries()){
+		reportProgress(`Making profile picture ${index + 1} of ${result.thumbnailJobs.length}\u2026`)
+
+		try {
+			let bitmap = await createImageBitmap(job.blob)
+			let thumbnailBlob = await makeCropThumbnailBlob(bitmap, job.crop)
+
+			bitmap.close()
+
+			await saveThumbnailBlob(job.personId, thumbnailBlob)
+		} catch {
+			failedThumbnailCount += 1
+		}
+	}
+
+	return failedThumbnailCount
+}
+
+// Replace and Merge, in an order that keeps what is here safe for as long as possible, Merge only adds, so its pictures are written first and the details last, if the details cannot be saved nothing is listed that is not stored, Replace has to clear the pictures, so the details are saved first, because their size is the only thing that can still fail, and if they do not fit everything is put back and nothing is cleared, after either, the page is redrawn from nothing so no old picture is shown under a reused id
+async function applyImport(plan, mode, resolutions = {}) {
+	isImporting = true
+
+	let previousPersons = persons
+	let previousImages = images
+	let previousHistory = activeHistory
+	let failedThumbnailCount = 0
+	let hasChangedData = false
+	let reportProgress = (message) => showImportView({
+		title : `Importing`,
+		message : message
+	})
+
+	reportProgress(`Preparing\u2026`)
+
+	try {
+		await checkImportSpace(plan, mode)
+
+		let result = mode == `merge` ? buildMergedData(plan, resolutions) : buildReplacementData(plan)
+		let nextPersons = mode == `merge` ? { ...persons, ...result.persons } : result.persons
+		let nextImages = mode == `merge` ? { ...images, ...result.images } : result.images
+		let nextHistory = mode == `merge` ? [...result.activeHistory, ...activeHistory].filter((personId, index, list) => list.lastIndexOf(personId) === index) : result.activeHistory
+		let saveDetails = () => {
+			persons = nextPersons
+			images = nextImages
+			activeHistory = nextHistory
+
+			try {
+				saveData()
+			} catch {
+				persons = previousPersons
+				images = previousImages
+				activeHistory = previousHistory
+
+				saveData()
+
+				throw new Error(`This browser has no room left to save the people and images.`)
+			}
+		}
+
+		if(mode == `merge`){
+			hasChangedData = true
+			failedThumbnailCount = await writeImportedPictures(plan, result, reportProgress)
+
+			saveDetails()
+		} else {
+			saveDetails()
+
+			hasChangedData = true
+
+			await clearImageStores()
+
+			failedThumbnailCount = await writeImportedPictures(plan, result, reportProgress)
+		}
+	} catch(error) {
+		isImporting = false
+
+		showImportView({
+			title : `Import failed`,
+			issue : hasChangedData ? `${error.message} Some of the file was already imported, so import it again with Replace to start clean.` : error.message,
+			buttons : [`importClose`]
+		})
+
+		clearPhoto()
+		clearGallery()
+		viewPerson()
+		scheduleExportSizeUpdate()
+
+		return
+	}
+
+	isImporting = false
+
+	// After Replace the data is the file, so the last export is the date of the file, and nothing has changed since
+	if(mode == `replace`){
+		let fileDate = new Date(plan.exportedAt)
+
+		markExported(isNaN(fileDate) ? null : fileDate.toISOString())
+	}
+
+	clearPhoto()
+	clearGallery()
+	closeImportDialog()
+	viewPerson()
+	scheduleExportSizeUpdate()
+
+	let notes = []
+
+	if(plan.missingImageIds.length > 0){
+		notes.push(`${describeCount(plan.missingImageIds.length, `image has`, `images have`)} no picture in the file.`)
+	}
+
+	if(failedThumbnailCount > 0){
+		notes.push(`${describeCount(failedThumbnailCount, `profile picture`, `profile pictures`)} could not be made again, choose them again.`)
+	}
+
+	if(notes.length > 0){
+		window.alert(`The import is finished. ${notes.join(` `)}`)
+	}
+}
+
 // Dates and names saved in their old forms are turned into lists, and the person on screen before the refresh is shown again, nothing is shown when the history is empty
 Object.values(persons).forEach(migrateDates)
 Object.values(persons).forEach(migrateNames)
+rememberSavedData()
 viewPerson()
+scheduleExportSizeUpdate()
+updateExportNote()
+setInterval(updateExportNote, 60000)?.unref?.()
