@@ -35,6 +35,7 @@
 				<div class="silhouette"></div>
 				<div id="details">
 					<div id="name"></div>
+					<div id="gender" onclick="editGender()"></div>
 					<div id="lifespan"></div>
 				</div>
 			</div>
@@ -56,6 +57,24 @@
 				<div class="list" id="nameList"></div>
 				<div class="buttons">
 					<button type="button" onclick="closeName()">Cancel</button>
+					<button type="submit">Save</button>
+				</div>
+			</form>
+		</dialog>
+		<dialog id="genderDialog">
+			<form onsubmit="saveGender(event)" oninput="updateGenderDialog()">
+				<div class="title">Gender</div>
+				<input id="genderValue" type="hidden">
+				<div class="choices" id="genderValueChoices"></div>
+				<div class="heading">Source order</div>
+				<input id="genderOrder" type="hidden">
+				<div class="choices" id="genderOrderChoices"></div>
+				<div class="description" id="genderOrderDescription"></div>
+				<input id="genderLink" type="text" placeholder="Link (optional)" autocomplete="off" autocapitalize="off" spellcheck="false">
+				<input id="genderNote" type="text" placeholder="Note (optional)" autocomplete="off">
+				<div class="list" id="genderList"></div>
+				<div class="buttons">
+					<button type="button" onclick="closeGender()">Cancel</button>
 					<button type="submit">Save</button>
 				</div>
 			</form>

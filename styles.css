@@ -427,11 +427,23 @@ body{
 			}
 			>.silhouette{
 				aspect-ratio: 1;
-				background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='8' r='4' fill='%23808080'/%3E%3Cpath d='M4 21c0-4.5 3.5-7 8-7s8 2.5 8 7z' fill='%23808080'/%3E%3C/svg%3E") center / 65% no-repeat rgba(200, 200, 200, .3);
 				border-radius: .75em;
 				flex: none;
+				height: 7.4em;
 				user-select: none;
-				width: 5.5em;
+				width: 7.4em;
+				&.unknown{
+					background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='8' r='4' fill='%23808080'/%3E%3Cpath d='M4 21c0-4.5 3.5-7 8-7s8 2.5 8 7z' fill='%23808080'/%3E%3C/svg%3E") center / 65% no-repeat rgba(200, 200, 200, .3);
+				}
+				&.male{
+					background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='7' r='3.5' fill='%234a76a8'/%3E%3Cpath d='M3 21v-3.5c0-1.4 1.1-2.5 2.5-2.5h13c1.4 0 2.5 1.1 2.5 2.5V21z' fill='%234a76a8'/%3E%3C/svg%3E") center / 65% no-repeat rgba(100, 150, 220, .22);
+				}
+				&.female{
+					background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7.5 9.5C7.5 5.5 9.5 3.5 12 3.5s4.5 2 4.5 6c0 1.4-.4 2.6-1 3.4-.3-1.9-1.5-3.3-3.5-3.3s-3.2 1.4-3.5 3.3c-.6-.8-1-2-1-3.4z' fill='%23b55674'/%3E%3Ccircle cx='12' cy='9.5' r='3' fill='%23b55674'/%3E%3Cpath d='M6 21c0-3.6 2.7-5.8 6-5.8s6 2.2 6 5.8z' fill='%23b55674'/%3E%3C/svg%3E") center / 65% no-repeat rgba(220, 115, 145, .22);
+				}
+				&.non-binary{
+					background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='7.5' r='3.5' fill='%237b56b0'/%3E%3Cpath d='M4 21a8 8 0 0 1 16 0z' fill='%237b56b0'/%3E%3C/svg%3E") center / 65% no-repeat rgba(155, 115, 215, .22);
+				}
 			}
 		}
 		#name{
@@ -464,19 +476,43 @@ body{
 				}
 			}
 		}
+		#gender{
+			border-radius: .25em;
+			cursor: pointer;
+			display: flex;
+			line-height: 1.35;
+			margin-top: .25em;
+			padding: .1em .25em;
+			white-space: nowrap;
+			width: fit-content;
+			&:empty{
+				display: none;
+			}
+			&:hover{
+				background: rgba(200, 200, 200, .3);
+			}
+			>.label{
+				font-weight: bold;
+				margin-right: .25em;
+			}
+			>.empty{
+				color: grey;
+			}
+		}
 		#lifespan{
 			align-items: baseline;
 			display: grid;
 			gap: .25em 0;
 			grid-template-columns: max-content auto;
-			margin-top: .5em;
+			margin-top: .25em;
 			width: fit-content;
 			>.date{
 				border-radius: .25em;
 				cursor: pointer;
 				display: flex;
 				grid-column: 1;
-				padding: 0 .25em;
+				line-height: 1.35;
+				padding: .1em .25em;
 				white-space: nowrap;
 				&:hover{
 					background: rgba(200, 200, 200, .3);
@@ -522,6 +558,7 @@ body{
 		scale: .95;
 		transition: display .25s allow-discrete, overlay .25s allow-discrete, opacity .25s, scale .25s;
 		&#dateDialog,
+		&#genderDialog,
 		&#nameDialog{
 			width: min(24em, calc(100vw - 2em));
 		}

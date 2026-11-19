@@ -64,6 +64,8 @@ function viewPerson(id = activeHistory.at(-1)) {
 		document.getElementById(`header`).hidden = true
 
 		document.getElementById(`name`).innerHTML = ``
+		document.getElementById(`gender`).innerHTML = ``
+		document.querySelector(`#header > .silhouette`).className = `silhouette unknown`
 		document.getElementById(`lifespan`).innerHTML = ``
 		updateRecentMenu()
 		saveData()
@@ -80,6 +82,8 @@ function viewPerson(id = activeHistory.at(-1)) {
 
 	document.getElementById(`name`).innerHTML = `<span class="rename" onclick="editName()">${escapeHtml(getNameLabel(person))}</span> <sup class="delete" onclick="deletePerson()">delete</sup>`
 
+	document.querySelector(`#header > .silhouette`).className = `silhouette ${getPreferredGender(person)?.value ?? `unknown`}`
+	document.getElementById(`gender`).innerHTML = buildGenderHtml(person)
 	document.getElementById(`lifespan`).innerHTML = buildLifespanHtml(person)
 	document.getElementById(`header`).hidden = false
 }
@@ -1209,6 +1213,289 @@ function saveName(event) {
 	}
 
 	closeName()
+	viewPerson()
+}
+
+// A gender is a list of entered values because sources disagree, each entry is { value, order, link, note } with null for every part that is not entered, value is one of the genderOptions, preferredVariantIndex is the starred entry that the person's page shows, and a person with no entered gender has no such property at all
+let genderOptions = [
+	{
+		value : `male`,
+		label : `Male`
+	},
+	{
+		value : `female`,
+		label : `Female`
+	},
+	{
+		value : `non-binary`,
+		label : `Non-Binary`
+	}
+]
+let genderDraft = {
+	variants : [],
+	preferredVariantIndex : 0,
+	selectedIndex : 0
+}
+
+function getBlankGender() {
+	return {
+		value : null,
+		order : null,
+		link : null,
+		note : null
+	}
+}
+
+function isGenderEmpty(gender) {
+	return gender.value == null
+}
+
+// A value that is not one of the options, from a file that was edited by hand, is written as it is so nothing is hidden
+function getGenderLabel(value) {
+	return genderOptions.find((option) => option.value === value)?.label ?? `${value}`
+}
+
+// The entry that the person's page shows, which is the starred one, or null when nothing was entered
+function getPreferredGender(person) {
+	let field = person.gender
+
+	if(!field || field.variants.length == 0){
+		return null
+	}
+
+	return field.variants[field.preferredVariantIndex] ?? field.variants[0]
+}
+
+// The label is always there and a gender that was never entered shows a dash, clicking the line opens the dialog, which is set in index.html
+function buildGenderHtml(person) {
+	let gender = getPreferredGender(person)
+
+	return `<span class="label">gender.</span>${gender ? escapeHtml(getGenderLabel(gender.value)) : `<span class="empty">\u2013</span>`}`
+}
+
+// The values are a row of small buttons, the chosen one is kept in a hidden box so the rest of the dialog can read it like any other box
+function renderGenderValueChoices() {
+	let chosenValue = document.getElementById(`genderValue`).value
+
+	document.getElementById(`genderValueChoices`).innerHTML = genderOptions
+		.map((option, index) => `<div class="choice${option.value === chosenValue ? ` selected` : ``}" onclick="chooseGenderValue(${index})">${option.label}</div>`)
+		.join(``)
+}
+
+// Choosing the value that is already chosen clears it again
+function chooseGenderValue(index) {
+	let valueInput = document.getElementById(`genderValue`)
+
+	valueInput.value = valueInput.value == genderOptions[index].value ? `` : genderOptions[index].value
+
+	updateGenderDialog()
+}
+
+// The orders are a row of small buttons and the meaning of the chosen one is written underneath, the same as in the name dialog, the chosen one is kept in a hidden box
+function renderGenderOrderChoices() {
+	let chosenSourceOrder = getSourceOrder(Number(document.getElementById(`genderOrder`).value))
+
+	document.getElementById(`genderOrderChoices`).innerHTML = sourceOrders
+		.map((sourceOrder) => `<div class="choice${sourceOrder.order === chosenSourceOrder?.order ? ` selected` : ``}" onclick="chooseGenderOrder(${sourceOrder.order})">${sourceOrder.label}</div>`)
+		.join(``)
+
+	document.getElementById(`genderOrderDescription`).textContent = chosenSourceOrder ? `${chosenSourceOrder.name} \u00b7 ${chosenSourceOrder.description}` : `Choose how close this source is to the person.`
+}
+
+// Choosing the order that is already chosen clears it again
+function chooseGenderOrder(order) {
+	let orderInput = document.getElementById(`genderOrder`)
+
+	orderInput.value = orderInput.value == `${order}` ? `` : order
+
+	updateGenderDialog()
+}
+
+function readGenderForm() {
+	return {
+		value : document.getElementById(`genderValue`).value,
+		order : document.getElementById(`genderOrder`).value,
+		link : document.getElementById(`genderLink`).value.trim(),
+		note : document.getElementById(`genderNote`).value.trim()
+	}
+}
+
+// The boxes always show the selected entry, an empty entry is allowed while editing and is dropped when the dialog is saved
+function fillGenderForm(gender) {
+	document.getElementById(`genderValue`).value = gender?.value ?? ``
+	document.getElementById(`genderOrder`).value = gender?.order ?? ``
+	document.getElementById(`genderLink`).value = gender?.link ?? ``
+	document.getElementById(`genderNote`).value = gender?.note ?? ``
+
+	renderGenderValueChoices()
+	renderGenderOrderChoices()
+}
+
+// Writes the boxes into the selected entry, a gender has no way to be impossible so this always works
+function syncGenderDraftFromForm() {
+	let form = readGenderForm()
+
+	genderDraft.variants[genderDraft.selectedIndex] = {
+		value : form.value == `` ? null : form.value,
+		order : form.order == `` ? null : Number(form.order),
+		link : form.link == `` ? null : form.link,
+		note : form.note == `` ? null : form.note
+	}
+}
+
+// The optional note and link go on a second line of the entry, a link is only clickable when it is a web address, and clicking it must not also select the entry
+function buildGenderEntryHtml(gender, index) {
+	let sourceOrder = getSourceOrder(gender.order)
+	let isEmpty = isGenderEmpty(gender)
+	let extraParts = []
+
+	if(gender.note){
+		extraParts.push(escapeHtml(gender.note))
+	}
+
+	if(gender.link){
+		extraParts.push(isWebAddress(gender.link)
+			? `<a href="${escapeHtml(gender.link)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${escapeHtml(getLinkLabel(gender.link))}</a>`
+			: escapeHtml(gender.link))
+	}
+
+	return `<div class="entry${index == genderDraft.selectedIndex ? ` selected` : ``}${isEmpty ? ` blank` : ``}" onclick="selectGenderEntry(${index})"><span class="star" onclick="starGenderEntry(event, ${index})">${index == genderDraft.preferredVariantIndex ? `\u2605` : `\u2606`}</span><span class="text">${isEmpty ? `New gender` : escapeHtml(getGenderLabel(gender.value))}</span><span class="meta">${sourceOrder ? `${sourceOrder.name} \u00b7 ${sourceOrder.label}` : `Source not set`}</span><span class="remove" onclick="removeGenderEntry(event, ${index})">remove</span>${extraParts.length > 0 ? `<span class="extra">${extraParts.join(` \u00b7 `)}</span>` : ``}</div>`
+}
+
+// The list of entered genders is only shown once there is something to list, the star marks the entry the page will show
+function renderGenderList() {
+	let isOnlyBlank = genderDraft.variants.length == 1 && isGenderEmpty(genderDraft.variants[0])
+
+	document.getElementById(`genderList`).innerHTML = isOnlyBlank ? `` : `<div class="heading"><span>Entered genders</span><span class="action" onclick="addAnotherGender()">+ add another</span></div>${genderDraft.variants.map(buildGenderEntryHtml).join(``)}`
+}
+
+// A copy of the list for the dialog to work on, with one blank entry when there is nothing yet, and the selection on the starred entry
+function getGenderDraft(field) {
+	let variants = (field?.variants ?? []).map((gender) => ({ ...gender }))
+	let preferredVariantIndex = field?.preferredVariantIndex ?? 0
+
+	if(variants.length == 0){
+		variants.push(getBlankGender())
+	}
+
+	return {
+		variants : variants,
+		preferredVariantIndex : preferredVariantIndex,
+		selectedIndex : Math.min(preferredVariantIndex, variants.length - 1)
+	}
+}
+
+// The dialog works on a copy of the list so Cancel throws every change away
+function editGender() {
+	let person = persons[activeHistory.at(-1)]
+
+	if(!person){
+		return
+	}
+
+	genderDraft = getGenderDraft(person.gender)
+
+	fillGenderForm(genderDraft.variants[genderDraft.selectedIndex])
+	renderGenderList()
+
+	document.getElementById(`genderDialog`).showModal()
+}
+
+function closeGender() {
+	document.getElementById(`genderDialog`).close()
+}
+
+// Every keystroke and every choice keeps the selected entry and the list up to date
+function updateGenderDialog() {
+	syncGenderDraftFromForm()
+	renderGenderValueChoices()
+	renderGenderOrderChoices()
+	renderGenderList()
+}
+
+function selectGenderEntry(index) {
+	syncGenderDraftFromForm()
+
+	genderDraft.selectedIndex = index
+
+	fillGenderForm(genderDraft.variants[index])
+	renderGenderList()
+}
+
+// A new blank entry is added and selected, unless the selected entry is already blank
+function addAnotherGender() {
+	syncGenderDraftFromForm()
+
+	if(!isGenderEmpty(genderDraft.variants[genderDraft.selectedIndex])){
+		genderDraft.variants.push(getBlankGender())
+		genderDraft.selectedIndex = genderDraft.variants.length - 1
+	}
+
+	fillGenderForm(genderDraft.variants[genderDraft.selectedIndex])
+	renderGenderList()
+}
+
+// The star is inside a row that selects itself when clicked, so the click is stopped from reaching the row
+function starGenderEntry(event, index) {
+	event.stopPropagation()
+
+	genderDraft.preferredVariantIndex = index
+
+	renderGenderList()
+}
+
+// Takes one entry out of the copy being edited, the star and the selection follow their entries when the ones before them move up, the star falls back to the first entry when its own entry is removed, and removing the last entry leaves one blank entry
+function removeGenderEntry(event, index) {
+	event.stopPropagation()
+	syncGenderDraftFromForm()
+
+	genderDraft.variants.splice(index, 1)
+
+	if(genderDraft.variants.length == 0){
+		genderDraft.variants.push(getBlankGender())
+	}
+
+	if(genderDraft.preferredVariantIndex == index){
+		genderDraft.preferredVariantIndex = 0
+	} else if(genderDraft.preferredVariantIndex > index){
+		genderDraft.preferredVariantIndex -= 1
+	}
+
+	if(genderDraft.selectedIndex > index){
+		genderDraft.selectedIndex -= 1
+	}
+
+	genderDraft.selectedIndex = Math.min(genderDraft.selectedIndex, genderDraft.variants.length - 1)
+
+	fillGenderForm(genderDraft.variants[genderDraft.selectedIndex])
+	renderGenderList()
+}
+
+// The empty entries are dropped, which is how a gender is removed, the star follows its entry and falls back to the first when its entry was dropped, a list left empty removes the property, and viewPerson redraws the page and saves
+function saveGender(event) {
+	event.preventDefault()
+	syncGenderDraftFromForm()
+
+	let person = persons[activeHistory.at(-1)]
+
+	if(!person){
+		return
+	}
+
+	let keptIndexes = genderDraft.variants
+		.map((gender, index) => index)
+		.filter((index) => !isGenderEmpty(genderDraft.variants[index]))
+
+	if(keptIndexes.length == 0){
+		delete person.gender
+	} else {
+		person.gender = {
+			preferredVariantIndex : Math.max(keptIndexes.indexOf(genderDraft.preferredVariantIndex), 0),
+			variants : keptIndexes.map((index) => genderDraft.variants[index])
+		}
+	}
+
+	closeGender()
 	viewPerson()
 }
 
