@@ -32,15 +32,12 @@
 		</div>
 		<div id="profile">
 			<div id="header">
-				<div id="photo" onclick="openPhoto()"></div>
-				<input id="photoInput" type="file" accept="image/*" hidden onchange="choosePhotoFile(event)">
+				<div class="silhouette"></div>
 				<div id="details">
 					<div id="name"></div>
 					<div id="lifespan"></div>
 				</div>
 			</div>
-			<div id="gallery" ondragover="event.preventDefault()" ondrop="dropGalleryFiles(event)"></div>
-			<input id="galleryInput" type="file" accept="image/*" multiple hidden onchange="uploadGalleryImages(event)">
 		</div>
 		<dialog id="nameDialog">
 			<form onsubmit="saveName(event)" oninput="updateNameDialog()">
@@ -86,60 +83,6 @@
 				<div class="buttons">
 					<button type="button" onclick="closeDate()">Cancel</button>
 					<button type="submit">Save</button>
-				</div>
-			</form>
-		</dialog>
-		<dialog id="imageDialog" onclose="releaseImage()" onkeydown="handleImageKey(event)">
-			<form onsubmit="saveImage(event)" oninput="updateImageDialog()">
-				<div class="picture">
-					<div class="frame" id="imagePicture"></div>
-					<button type="button" class="previous" id="imagePrevious" onclick="showAdjacentImage(-1)" hidden>&#8249;</button>
-					<button type="button" class="next" id="imageNext" onclick="showAdjacentImage(1)" hidden>&#8250;</button>
-					<div class="counter" id="imageCounter"></div>
-				</div>
-				<div class="heading">People in the image</div>
-				<div class="list people" id="imagePeople"></div>
-				<input id="imagePersonName" type="text" placeholder="Add a person (optional)" autocomplete="off" onkeydown="handleImagePersonKey(event)">
-				<div class="list" id="imageSuggestions"></div>
-				<div class="notice" id="imageNotice"></div>
-				<div class="heading">Date</div>
-				<div class="dateInputs">
-					<label class="day"><span class="name">Day</span><input id="imageDay" type="text" inputmode="numeric" maxlength="2" autocomplete="off"></label>
-					<label class="month"><span class="name">Month</span><input id="imageMonth" type="text" inputmode="numeric" maxlength="2" autocomplete="off"></label>
-					<label class="year"><span class="name">Year</span><input id="imageYear" type="text" inputmode="numeric" maxlength="4" autocomplete="off"></label>
-				</div>
-				<div class="heading">Note</div>
-				<textarea id="imageNote" rows="3"></textarea>
-				<div class="issue" id="imageIssue"></div>
-				<div class="buttons">
-					<button type="button" class="profile" id="imageProfile" onclick="setImageAsProfile()">Use as profile photo</button>
-					<button type="button" class="delete" id="imageDelete" onclick="deleteImage()">Delete image</button>
-					<button type="button" onclick="closeImage()">Cancel</button>
-					<button type="submit">Save</button>
-				</div>
-			</form>
-		</dialog>
-		<dialog id="photoDialog" onclose="releasePhoto()">
-			<form onsubmit="saveProfile(event)">
-				<div class="title">Profile picture</div>
-				<div class="cropper" id="photoCropper" onpointerdown="startPhotoDrag(event)" onpointermove="movePhotoDrag(event)" onpointerup="endPhotoDrag()" onpointercancel="endPhotoDrag()"><img id="photoCropImage" alt="" hidden><div class="frame" id="photoCropFrame" hidden></div></div>
-				<div class="heading">Size</div>
-				<input id="photoSize" type="range" min="0.1" max="1" step="0.01" value="1" oninput="updatePhotoSize()" disabled>
-				<div class="issue" id="photoIssue"></div>
-				<div class="buttons">
-					<button type="button" class="choose" onclick="choosePhoto()">Choose image</button>
-					<button type="button" onclick="closePhoto()">Cancel</button>
-					<button type="submit">Save</button>
-				</div>
-			</form>
-		</dialog>
-		<dialog id="orphanDialog" onclose="releaseOrphanFolder()">
-			<form onsubmit="event.preventDefault()">
-				<div class="title">Orphaned images</div>
-				<div class="notice" id="orphanCount"></div>
-				<div id="orphanTiles"></div>
-				<div class="buttons">
-					<button type="button" onclick="closeOrphanFolder()">Close</button>
 				</div>
 			</form>
 		</dialog>
