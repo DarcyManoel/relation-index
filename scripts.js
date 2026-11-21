@@ -48,6 +48,8 @@ function deletePerson() {
 		return
 	}
 
+	unlinkPersonFromRelations(id)
+
 	delete persons[id]
 	activeHistory = activeHistory.filter((historyId) => historyId != id)
 
@@ -67,6 +69,8 @@ function viewPerson(id = activeHistory.at(-1)) {
 		document.getElementById(`gender`).innerHTML = ``
 		document.querySelector(`#header > .silhouette`).className = `silhouette unknown`
 		document.getElementById(`lifespan`).innerHTML = ``
+
+		clearRelations()
 		updateRecentMenu()
 		saveData()
 
@@ -86,6 +90,13 @@ function viewPerson(id = activeHistory.at(-1)) {
 	document.getElementById(`gender`).innerHTML = buildGenderHtml(person)
 	document.getElementById(`lifespan`).innerHTML = buildLifespanHtml(person)
 	document.getElementById(`header`).hidden = false
+
+	// What can be worked out from the parents is worked out each time a person is shown, and saved when it changed something
+	if(runRelationInference(id)){
+		saveData()
+	}
+
+	renderRelations(id)
 }
 
 // The menu lists the 10 most recent people other than the one on screen, newest first, each person only once
@@ -195,9 +206,9 @@ function buildHighlightHtml(text, terms) {
 	return `${html}${escapeHtml(text.slice(position))}`
 }
 
-// The fine text says what kind of thing the result is, only people can be found for now, and when the name that matched is not the starred one the name the page shows is added so the result is not a surprise
+// The fine text says how the person is related to the person on screen, or Person when they are not, and when the name that matched is not the starred one the name the page shows is added so the result is not a surprise
 function buildSearchResultHtml(match, terms) {
-	return `<div class="result" onclick="openSearchResult(${match.id})"><div class="text">${buildHighlightHtml(match.text, terms)}</div><div class="kind">Person${match.isPreferred ? `` : ` \u00b7 shown as ${escapeHtml(match.label)}`}</div></div>`
+	return `<div class="result" onclick="openSearchResult(${match.id})"><div class="text">${buildHighlightHtml(match.text, terms)}</div><div class="kind">${escapeHtml(getKinshipLabel(match.id))}${match.isPreferred ? `` : ` \u00b7 shown as ${escapeHtml(match.label)}`}</div></div>`
 }
 
 // Runs on every keystroke and when the box is focused again, an empty box lists nothing, only people can be found
@@ -1499,6 +1510,47 @@ function saveGender(event) {
 	viewPerson()
 }
 
+// A gender in a file that was edited by hand, or written by an older version, is made safe, a gender that is not a list of sources is dropped, a source whose value is not one of the options is dropped, the order, the link and the note of the others are kept when they are valid, a gender with no valid source left is dropped, and the star stays on its own source, or goes to the first when that source was dropped or the star was out of bounds
+function sanitizeGender(person) {
+	if(!isPlainObject(person.gender) || !Array.isArray(person.gender.variants)){
+		delete person.gender
+
+		return
+	}
+
+	let starredVariant = person.gender.variants[person.gender.preferredVariantIndex]
+	let cleanedVariants = []
+	let preferredVariantIndex = 0
+
+	for(let variant of person.gender.variants){
+		if(!isPlainObject(variant) || !genderOptions.some((option) => option.value === variant.value)){
+			continue
+		}
+
+		if(variant === starredVariant){
+			preferredVariantIndex = cleanedVariants.length
+		}
+
+		cleanedVariants.push({
+			value : variant.value,
+			order : Number.isInteger(variant.order) && getSourceOrder(variant.order) ? variant.order : null,
+			link : typeof variant.link == `string` && variant.link != `` ? variant.link : null,
+			note : typeof variant.note == `string` && variant.note != `` ? variant.note : null
+		})
+	}
+
+	if(cleanedVariants.length == 0){
+		delete person.gender
+
+		return
+	}
+
+	person.gender = {
+		preferredVariantIndex : preferredVariantIndex,
+		variants : cleanedVariants
+	}
+}
+
 // Export and import move everything in one JSON file that can be read and edited by hand, it holds the people and the history
 let exportSizeTimer = null
 
@@ -1829,7 +1881,9 @@ function applyImport(data) {
 
 	Object.values(persons).forEach(migrateDates)
 	Object.values(persons).forEach(migrateNames)
+	Object.values(persons).forEach(sanitizeGender)
 	Object.values(persons).forEach(removeLegacyImageData)
+	Object.values(persons).forEach(sanitizeRelations)
 
 	if(typeof rebuildPlainTextRelationIndex == `function`){
 		rebuildPlainTextRelationIndex()
@@ -1854,14 +1908,19 @@ function applyImport(data) {
 	scheduleExportSizeUpdate()
 }
 
-// Dates and names saved in their old forms are turned into lists, the profile picture ids and crops of the time when the page had pictures are dropped, and so are the pictures themselves, which were kept in localStorage and in an IndexedDB database, and the person on screen before the refresh is shown again, nothing is shown when the history is empty
-Object.values(persons).forEach(migrateDates)
-Object.values(persons).forEach(migrateNames)
-Object.values(persons).forEach(removeLegacyImageData)
-localStorage.removeItem(`images`)
-indexedDB.deleteDatabase(`relationIndexImages`)
-rememberSavedData()
-viewPerson()
-scheduleExportSizeUpdate()
-updateExportNote()
-setInterval(updateExportNote, 60000)?.unref?.()
+// Dates and names saved in their old forms are turned into lists, the profile picture ids and crops of the time when the page had pictures are dropped, and so are the pictures themselves, which were kept in localStorage and in an IndexedDB database, relations are made safe and the list of plain text relatives is built, and the person on screen before the refresh is shown again, nothing is shown when the history is empty, this is a function because relations.js is read after this file and calls it when it is ready, the first drawing of a person needs the relations
+function startApp() {
+	Object.values(persons).forEach(migrateDates)
+	Object.values(persons).forEach(migrateNames)
+	Object.values(persons).forEach(sanitizeGender)
+	Object.values(persons).forEach(removeLegacyImageData)
+	Object.values(persons).forEach(sanitizeRelations)
+	localStorage.removeItem(`images`)
+	indexedDB.deleteDatabase(`relationIndexImages`)
+	rebuildPlainTextRelationIndex()
+	rememberSavedData()
+	viewPerson()
+	scheduleExportSizeUpdate()
+	updateExportNote()
+	setInterval(updateExportNote, 60000)?.unref?.()
+}
