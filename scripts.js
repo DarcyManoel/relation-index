@@ -471,11 +471,15 @@ function buildSearchResultHtml(match, terms) {
 function updateSearch() {
 	searchSelectedIndex = -1
 
+	document.getElementById(`results`).classList.remove(`keyboardNav`)
+
 	let terms = getSearchTerms()
 	let resultsElement = document.getElementById(`results`)
 
 	if(terms.length == 0){
 		resultsElement.innerHTML = ``
+
+		updateSearchScrollCue()
 
 		return
 	}
@@ -485,14 +489,31 @@ function updateSearch() {
 	if(personMatches.length == 0){
 		resultsElement.innerHTML = `<div class="none">No results found</div>`
 
+		updateSearchScrollCue()
+
 		return
 	}
 
-	resultsElement.innerHTML = `<div class="heading">People</div>${personMatches.map((match) => buildSearchResultHtml(match, terms)).join(``)}`
+	resultsElement.innerHTML = `<div class="moreCue top">\u2191 more</div><div class="heading">People</div>${personMatches.map((match) => buildSearchResultHtml(match, terms)).join(``)}<div class="moreCue bottom">\u2193 more</div>`
+
+	updateSearchScrollCue()
+}
+
+// The results have a cue stuck to the top and one stuck to the bottom, both are always in the results and only shown or hidden, so the height of what is scrolled never changes and a scroll that is going on is never interrupted, the top one is shown while the results are scrolled down, the bottom one while there are more results below, and the margins of a few pixels are for the rounding of the scroll position
+function updateSearchScrollCue() {
+	let resultsElement = document.getElementById(`results`)
+	let isOverflowing = resultsElement.scrollHeight > resultsElement.clientHeight + 2
+
+	resultsElement.querySelector(`.moreCue.top`)?.classList.toggle(`visible`, resultsElement.scrollTop > 4)
+	resultsElement.querySelector(`.moreCue.bottom`)?.classList.toggle(`visible`, isOverflowing && resultsElement.scrollTop + resultsElement.clientHeight < resultsElement.scrollHeight - 4)
 }
 
 function closeSearch() {
 	document.getElementById(`search`).value = ``
+
+	searchSelectedIndex = -1
+
+	document.getElementById(`results`).classList.remove(`keyboardNav`)
 
 	updateSearch()
 
@@ -517,13 +538,14 @@ function moveSearchSelection(step) {
 
 	searchSelectedIndex = Math.min(Math.max(searchSelectedIndex + step, 0), resultElements.length - 1)
 
+	document.getElementById(`results`).classList.add(`keyboardNav`)
+
 	for(let [index, resultElement] of resultElements.entries()){
 		resultElement.classList.toggle(`selected`, index == searchSelectedIndex)
 	}
 
 	resultElements[searchSelectedIndex].scrollIntoView({
-		block : `nearest`,
-		behavior : `smooth`
+		block : `nearest`
 	})
 }
 
@@ -539,6 +561,34 @@ function handleSearchKey(event) {
 		(document.querySelector(`#results > .result.selected`) ?? document.querySelector(`#results > .result`))?.click()
 	}
 }
+
+// Scrolling the results shows or hides the cues at the top and the bottom, and they are worked out again when the search box is focused, because the results are shown again then, pressing the mouse inside the results must not take the focus from the search box, which keeps the results shown and keeps the wheel scrolling for as long as the pointer is there
+document.getElementById(`results`).addEventListener(`scroll`, updateSearchScrollCue)
+document.getElementById(`search`).addEventListener(`focus`, updateSearchScrollCue)
+document.getElementById(`results`).onmousedown = (event) => event.preventDefault()
+
+// Where the pointer was at the last mouse move over the results, scrolling a result into view makes the page send a mouse move with the same coordinates, so only a move to other coordinates counts, the first move only remembers where the pointer is, and a real move takes the keyboard mode off and clears the selected result, which gives the highlight back to the result under the pointer
+let lastSearchMouseX = null
+let lastSearchMouseY = null
+
+document.getElementById(`results`).addEventListener(`mousemove`, (event) => {
+	let hasMoved = lastSearchMouseX !== null && (event.clientX !== lastSearchMouseX || event.clientY !== lastSearchMouseY)
+
+	lastSearchMouseX = event.clientX
+	lastSearchMouseY = event.clientY
+
+	if(!hasMoved){
+		return
+	}
+
+	searchSelectedIndex = -1
+
+	document.getElementById(`results`).classList.remove(`keyboardNav`)
+
+	for(let resultElement of document.querySelectorAll(`#results > .result.selected`)){
+		resultElement.classList.remove(`selected`)
+	}
+})
 
 // The place on the active profile that the keyboard is on, counted over getProfileFocusTargets, and minus one while there is none, the place itself carries the kbdFocus class
 let profileFocusIndex = -1
@@ -2322,4 +2372,5 @@ function startApp() {
 	scheduleExportSizeUpdate()
 	updateExportNote()
 	setInterval(updateExportNote, 60000)?.unref?.()
+	document.getElementById(`search`).addEventListener(`blur`, closeSearch)
 }

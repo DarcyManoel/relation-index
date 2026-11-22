@@ -16,8 +16,11 @@
 	box-sizing: border-box;
 	interpolate-size: allow-keywords;
 	outline: none;
-	overscroll-behavior: none;
 	transition: .5s;
+}
+html,
+body{
+	overscroll-behavior: none;
 }
 body{
 	display: flex;
@@ -361,7 +364,9 @@ body{
 			max-height: 20em;
 			opacity: 0;
 			overflow-y: auto;
-			padding: .25em;
+			overscroll-behavior: contain;
+			padding: 0;
+			pointer-events: auto;
 			position: absolute;
 			right: 0;
 			top: calc(100% + .5em);
@@ -370,6 +375,44 @@ body{
 			visibility: hidden;
 			&:empty{
 				display: none;
+			}
+			>.moreCue{
+				color: grey;
+				font-size: .75em;
+				height: 2em;
+				left: 0;
+				line-height: 1.5em;
+				opacity: 0;
+				padding: .25em 0;
+				pointer-events: none;
+				position: sticky;
+				right: 0;
+				text-align: center;
+				transition: opacity .15s;
+				user-select: none;
+				visibility: hidden;
+				width: 100%;
+				z-index: 2;
+				&.top{
+					background: linear-gradient(to top, transparent, rgba(225, 225, 225, .92));
+					border-radius: .75em .75em 0 0;
+					margin-bottom: -2em;
+					top: 0;
+				}
+				&.bottom{
+					background: linear-gradient(to bottom, transparent, rgba(225, 225, 225, .92));
+					border-radius: 0 0 .75em .75em;
+					bottom: 0;
+					margin-top: -2em;
+				}
+				&.visible{
+					opacity: 1;
+					visibility: visible;
+				}
+			}
+			&:not(.keyboardNav)>.result:hover{
+				background: rgba(200, 200, 200, .5);
+				border-radius: 1em;
 			}
 			mark{
 				background: rgba(150, 150, 150, .5);
@@ -380,6 +423,7 @@ body{
 				color: grey;
 				font-size: .8em;
 				letter-spacing: .1em;
+				margin: 0 .25em;
 				padding: .25em .5em 0;
 				text-transform: uppercase;
 				user-select: none;
@@ -387,9 +431,9 @@ body{
 			>.result{
 				border-radius: .5em;
 				cursor: pointer;
+				margin: 0 .25em;
 				padding: .25em .5em;
-				&.selected,
-				&:hover{
+				&.selected{
 					background: rgba(200, 200, 200, .5);
 					border-radius: 1em;
 				}
@@ -408,6 +452,7 @@ body{
 			}
 			>.none{
 				color: grey;
+				margin: 0 .25em;
 				padding: .25em .5em;
 			}
 		}
@@ -740,6 +785,7 @@ body{
 		max-height: calc(100dvh - 2em);
 		opacity: 0;
 		overflow-y: auto;
+		overscroll-behavior: none;
 		padding: 1em;
 		scale: .95;
 		transition: display .25s allow-discrete, overlay .25s allow-discrete, opacity .25s, scale .25s;
