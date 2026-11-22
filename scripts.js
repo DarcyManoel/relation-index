@@ -306,6 +306,12 @@ function deletePerson() {
 function viewPerson(id = activeHistory.at(-1)) {
 	id = Number(id)
 
+	clearProfileFocus()
+
+	let shouldFocusRelation = focusFirstRelationOnLoad
+
+	focusFirstRelationOnLoad = false
+
 	let person = persons[id]
 
 	if(!person){
@@ -343,6 +349,10 @@ function viewPerson(id = activeHistory.at(-1)) {
 	}
 
 	renderRelations(id)
+
+	if(shouldFocusRelation){
+		focusFirstProfileRelation()
+	}
 }
 
 // The menu lists the 10 most recent people other than the one on screen, newest first, each person only once
@@ -459,6 +469,8 @@ function buildSearchResultHtml(match, terms) {
 
 // Runs on every keystroke and when the box is focused again, an empty box lists nothing, only people can be found
 function updateSearch() {
+	searchSelectedIndex = -1
+
 	let terms = getSearchTerms()
 	let resultsElement = document.getElementById(`results`)
 
@@ -492,14 +504,229 @@ function openSearchResult(id) {
 	closeSearch()
 }
 
-// Enter opens the first result and Escape gives up the search
+// The result that the arrow keys are on, counted from the top, and minus one while none is selected, it is reset whenever the results are drawn again
+let searchSelectedIndex = -1
+
+// Moves the selected mark one result up or down and stays on the first or the last result at the ends, the selected result is scrolled into view, and nothing happens when there are no results
+function moveSearchSelection(step) {
+	let resultElements = [...document.querySelectorAll(`#results > .result`)]
+
+	if(resultElements.length == 0){
+		return
+	}
+
+	searchSelectedIndex = Math.min(Math.max(searchSelectedIndex + step, 0), resultElements.length - 1)
+
+	for(let [index, resultElement] of resultElements.entries()){
+		resultElement.classList.toggle(`selected`, index == searchSelectedIndex)
+	}
+
+	resultElements[searchSelectedIndex].scrollIntoView({
+		block : `nearest`,
+		behavior : `smooth`
+	})
+}
+
+// The arrow keys move through the results, Enter opens the selected result, or the first one when none is selected, and Escape gives up the search
 function handleSearchKey(event) {
 	if(event.key == `Escape`){
 		closeSearch()
+	} else if(event.key == `ArrowDown` || event.key == `ArrowUp`){
+		event.preventDefault()
+
+		moveSearchSelection(event.key == `ArrowDown` ? 1 : -1)
 	} else if(event.key == `Enter`){
-		document.querySelector(`#results>.result`)?.click()
+		(document.querySelector(`#results > .result.selected`) ?? document.querySelector(`#results > .result`))?.click()
 	}
 }
+
+// The place on the active profile that the keyboard is on, counted over getProfileFocusTargets, and minus one while there is none, the place itself carries the kbdFocus class
+let profileFocusIndex = -1
+
+// Everything on the profile that the keyboard can go to, in the order it is on the page, the name, the gender, the birth and death lines, and then for each list of relations only its entries when it has any, because the entries are what is gone through, and only its heading when it has none, the dash of an empty list is never a place of its own, what is not on screen is left out, such as the gender line of a person with none
+function getProfileNavTargets() {
+	let targets = [...document.querySelectorAll(`#name, #gender, #lifespan > .date`)]
+
+	for(let roleElement of document.querySelectorAll(`#relations > .role`)){
+		let populatedEntries = roleElement.querySelectorAll(`.entries > .entry:not(.empty)`)
+
+		if(populatedEntries.length > 0){
+			targets.push(...populatedEntries)
+		} else {
+			targets.push(roleElement.querySelector(`.heading`))
+		}
+	}
+
+	return targets.filter((element) => element.getClientRects().length > 0)
+}
+
+function clearProfileFocus() {
+	for(let element of document.querySelectorAll(`.kbdFocus`)){
+		element.classList.remove(`kbdFocus`)
+	}
+
+	profileFocusIndex = -1
+}
+
+// Puts the focus on one place of the list, the place that had it before loses it, and the new place is scrolled into view, nothing happens when there is no such place
+function setProfileFocus(index) {
+	let target = getProfileNavTargets()[index]
+
+	if(!target){
+		return
+	}
+
+	for(let element of document.querySelectorAll(`.kbdFocus`)){
+		element.classList.remove(`kbdFocus`)
+	}
+
+	target.classList.add(`kbdFocus`)
+
+	profileFocusIndex = index
+
+	target.scrollIntoView({
+		block : `nearest`,
+		behavior : `smooth`
+	})
+}
+
+// Moves the focus one place down or up and stays on the first or the last place at the ends, the first arrow press goes to the first place when going down and to the last when going up
+function moveProfileFocus(step) {
+	let targetCount = getProfileNavTargets().length
+
+	if(targetCount == 0){
+		return
+	}
+
+	setProfileFocus(profileFocusIndex == -1 ? (step > 0 ? 0 : targetCount - 1) : Math.min(Math.max(profileFocusIndex + step, 0), targetCount - 1))
+}
+
+// Set when Enter opens a relation, so the page of that person puts the focus on their first relation straight away and the keyboard can carry on from there
+let focusFirstRelationOnLoad = false
+
+// The first place inside the relations, or the very first place when the relations have none
+function focusFirstProfileRelation() {
+	let firstRelationIndex = getProfileNavTargets().findIndex((element) => element.closest(`#relations`))
+
+	setProfileFocus(firstRelationIndex == -1 ? 0 : firstRelationIndex)
+}
+
+// What E does on the place that has the focus, the name, the gender and the dates open their dialogs, and a relations heading or an entry of a list opens the relations dialog on that list
+function editProfileFocus(element) {
+	if(element.id == `name`){
+		editName()
+	} else if(element.id == `gender`){
+		editGender()
+	} else if(element.matches(`#lifespan > .date`)){
+		if(element.querySelector(`.label`).textContent.startsWith(`birth`)){
+			editBirth()
+		} else {
+			editDeath()
+		}
+	} else {
+		openRelationsDialog(element.closest(`.role`).dataset.role)
+	}
+}
+
+// What Enter does on the place that has the focus, an entry with a page opens that page, an entry with no page, which is plain text or the dash of an empty list, opens the relations dialog on its list, and everywhere else it is the same as E
+function openProfileFocus(element) {
+	if(element.matches(`.entry`)){
+		let linkedName = element.querySelector(`.name.linked`)
+
+		if(linkedName){
+			focusFirstRelationOnLoad = true
+
+			linkedName.click()
+		} else {
+			editProfileFocus(element)
+		}
+	} else {
+		editProfileFocus(element)
+	}
+}
+
+// Where the pointer was at the last mouse move, the focus of the keyboard is only given up when the pointer really moved, because the page also gets mouse moves when it scrolls or changes under a pointer that is standing still, and those come with the same coordinates
+let lastMouseX = null
+let lastMouseY = null
+
+document.addEventListener(`mousemove`, (event) => {
+	let hasMoved = event.clientX !== lastMouseX || event.clientY !== lastMouseY
+
+	lastMouseX = event.clientX
+	lastMouseY = event.clientY
+
+	if(profileFocusIndex !== -1 && hasMoved){
+		clearProfileFocus()
+	}
+})
+
+function openShortcuts() {
+	document.getElementById(`shortcutsDialog`).showModal()
+}
+
+function closeShortcuts() {
+	document.getElementById(`shortcutsDialog`).close()
+}
+
+// Ctrl or Cmd and S always exports, the browser would otherwise offer to save the page, every other shortcut is a single key and is left alone while typing in a box, while a modifier is held, and while any dialog is open, apart from the keys that close the shortcuts dialog, which is open on its own with nothing typed in it, the single keys are / for the shortcuts, S for the search box, the arrows and E and Enter and Escape for the profile
+document.addEventListener(`keydown`, (event) => {
+	if((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === `s`){
+		event.preventDefault()
+
+		if(!event.repeat){
+			exportData()
+		}
+
+		return
+	}
+
+	let target = event.target
+
+	if(event.ctrlKey || event.metaKey || event.altKey || [`INPUT`, `TEXTAREA`, `SELECT`].includes(target.tagName) || target.isContentEditable){
+		return
+	}
+
+	if(document.getElementById(`shortcutsDialog`).open){
+		if(event.key == `/` || event.key == `Escape`){
+			event.preventDefault()
+
+			closeShortcuts()
+		}
+
+		return
+	}
+
+	if(document.querySelector(`dialog[open]`)){
+		return
+	}
+
+	let focusedElement = document.querySelector(`.kbdFocus`)
+
+	if(event.key == `/`){
+		event.preventDefault()
+
+		openShortcuts()
+	} else if(event.key.toLowerCase() == `s`){
+		event.preventDefault()
+
+		document.getElementById(`search`).focus()
+		document.getElementById(`search`).select()
+	} else if(event.key == `ArrowDown` || event.key == `ArrowUp`){
+		event.preventDefault()
+
+		moveProfileFocus(event.key == `ArrowDown` ? 1 : -1)
+	} else if(event.key.toLowerCase() == `e` && focusedElement){
+		event.preventDefault()
+
+		editProfileFocus(focusedElement)
+	} else if(event.key == `Enter` && focusedElement){
+		event.preventDefault()
+
+		openProfileFocus(focusedElement)
+	} else if(event.key == `Escape`){
+		clearProfileFocus()
+	}
+})
 
 // A birth or a death is a list of entered dates because sources disagree, each entry is { year, month, day, links, note } with null for every part that is not known, links being a list of web addresses and note being optional, preferredVariantIndex is the starred entry that the person's page shows, and a person with no entered dates has no such property at all
 let monthNames = [`Jan`, `Feb`, `Mar`, `Apr`, `May`, `Jun`, `Jul`, `Aug`, `Sep`, `Oct`, `Nov`, `Dec`]

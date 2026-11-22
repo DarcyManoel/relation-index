@@ -1222,6 +1222,8 @@ function buildRelationEntryHtml(ownerId, role, entry) {
 
 // The relations of the person on screen are drawn as three lists under the header, parents, siblings and children, each with a label that opens the dialog on that role, an empty list is one dash that opens the same dialog, and every list is sorted from the oldest to the youngest
 function renderRelations(personId) {
+	clearProfileFocus?.()
+
 	let person = persons[personId]
 
 	if(!person){
@@ -1233,7 +1235,7 @@ function renderRelations(personId) {
 	document.getElementById(`relations`).innerHTML = relationRoles.map((role) => {
 		let entries = sortRelationEntries((person.relations?.[role] ?? []).filter(isRenderableRelationEntry))
 
-		return `<div class="role"><div class="heading" onclick="openRelationsDialog('${role}')"><span>${relationRoleLabels[role]}</span><span class="action">+ edit</span></div><div class="entries">${entries.length == 0 ? `<div class="entry empty" onclick="openRelationsDialog('${role}')">\u2013</div>` : entries.map((entry) => buildRelationEntryHtml(personId, role, entry)).join(``)}</div></div>`
+		return `<div class="role" data-role="${role}"><div class="heading" onclick="openRelationsDialog('${role}')"><span>${relationRoleLabels[role]}</span><span class="action">+ <u>e</u>dit</span></div><div class="entries">${entries.length == 0 ? `<div class="entry empty" onclick="openRelationsDialog('${role}')">\u2013</div>` : entries.map((entry) => buildRelationEntryHtml(personId, role, entry)).join(``)}</div></div>`
 	}).join(``)
 }
 

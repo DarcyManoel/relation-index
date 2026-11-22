@@ -157,6 +157,22 @@
 				<div class="issue" id="addRelationIssue"></div>
 			</form>
 		</dialog>
+		<dialog id="shortcutsDialog">
+			<form onsubmit="event.preventDefault()">
+				<div class="title">Keyboard shortcuts</div>
+				<div class="shortcuts">
+					<div class="row"><span class="keys"><kbd>S</kbd></span><span class="label">Search</span></div>
+					<div class="row"><span class="keys"><kbd>&uarr;</kbd><kbd>&darr;</kbd></span><span class="label">Navigation</span></div>
+					<div class="row"><span class="keys"><kbd>E</kbd></span><span class="label">Edit selected field</span></div>
+					<div class="row"><span class="keys"><kbd>Enter</kbd></span><span class="label">Open selected item</span></div>
+					<div class="row"><span class="keys"><kbd>Ctrl / Cmd</kbd><span class="plus">+</span><kbd>S</kbd></span><span class="label">Export database</span></div>
+					<div class="row"><span class="keys"><kbd>/</kbd></span><span class="label">Toggle keybinds</span></div>
+				</div>
+				<div class="buttons">
+					<button type="button" onclick="closeShortcuts()">Close</button>
+				</div>
+			</form>
+		</dialog>
 		<dialog id="importDialog">
 			<form onsubmit="event.preventDefault()">
 				<div class="title">Import</div>
