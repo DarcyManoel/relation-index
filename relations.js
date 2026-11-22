@@ -1,20 +1,23 @@
-// The relations of a person are kept on the person as relations = { parents, siblings, children, blockedInferences }, each of the three is a list of entries, an entry is { personId, variants, preferredVariantIndex } for someone who has a page, or { text, variants, preferredVariantIndex } for someone only written down as plain text, the variants are the sources that disagree or agree, each is { subtype, links, note, isAutoInferred, inferenceId, derivedFrom, isQuestioned }, a variant is either typed in by the user or worked out by the page from the parents that were entered, which is isAutoInferred, a typed variant that the page worked out the same kind of link for carries that as hasInference, inferenceId, derivedFrom and inferenceNote instead of getting a second variant next to it, blockedInferences is optional and is a list of role:targetId texts for links that the user removed after the page worked them out, the page does not work those out again until that person is added by hand under that role, and a person with no relations at all has no such property
-let relationRoles = [`parents`, `siblings`, `children`]
+// The relations of a person are kept on the person as relations = { parents, siblings, partners, children, blockedInferences }, each of the four is a list of entries, an entry is { personId, variants, preferredVariantIndex } for someone who has a page, or { text, variants, preferredVariantIndex } for someone only written down as plain text, the variants are the sources that disagree or agree, each is { subtype, links, note, isAutoInferred, inferenceId, derivedFrom, isQuestioned }, a variant is either typed in by the user or worked out by the page from the parents that were entered, which is isAutoInferred, a typed variant that the page worked out the same kind of link for carries that as hasInference, inferenceId, derivedFrom and inferenceNote instead of getting a second variant next to it, blockedInferences is optional and is a list of role:targetId texts for links that the user removed after the page worked them out, the page does not work those out again until that person is added by hand under that role, and a person with no relations at all has no such property
+let relationRoles = [`parents`, `siblings`, `partners`, `children`]
 let relationRoleLabels = {
 	parents : `Parents`,
 	siblings : `Siblings`,
+	partners : `Partners`,
 	children : `Children`
 }
 let relationRoleSingularLabels = {
 	parents : `parent`,
 	siblings : `sibling`,
+	partners : `partner`,
 	children : `child`
 }
 
-// Which kinds of link each role can have, a half sibling only exists between siblings
+// Which kinds of link each role can have, a half sibling only exists between siblings, and a partner link is married, partner or separated, which is a pair who were together
 let relationSubtypes = {
 	parents : [`biological`, `step`, `non-biological`, `unknown`],
 	siblings : [`biological`, `half`, `step`, `non-biological`, `unknown`],
+	partners : [`married`, `partner`, `separated`, `unknown`],
 	children : [`biological`, `step`, `non-biological`, `unknown`]
 }
 let relationSubtypeLabels = {
@@ -22,6 +25,9 @@ let relationSubtypeLabels = {
 	half : `Half`,
 	step : `Step`,
 	[`non-biological`] : `Non-biological`,
+	married : `Married`,
+	partner : `Partner`,
+	separated : `Separated`,
 	unknown : `Unknown`
 }
 
@@ -60,6 +66,7 @@ function ensureRelations(person) {
 		person.relations = {
 			parents : [],
 			siblings : [],
+			partners : [],
 			children : []
 		}
 	}
@@ -93,7 +100,11 @@ function getReciprocalRole(role) {
 		return `children`
 	}
 
-	return role == `children` ? `parents` : `siblings`
+	if(role == `children`){
+		return `parents`
+	}
+
+	return role
 }
 
 // A link the user took away after the page worked it out is written as role:targetId, which is the role on the list of the person and the person who was on it
@@ -328,6 +339,7 @@ function sanitizeRelations(person) {
 	let cleanedRelations = {
 		parents : [],
 		siblings : [],
+		partners : [],
 		children : []
 	}
 	let linkedPersonIds = new Set()
@@ -378,7 +390,7 @@ function sanitizeRelations(person) {
 
 	// The links kept from being worked out are only role:personId texts of people who still exist and who are not the person themselves, each once
 	let blockedInferences = [...new Set(Array.isArray(person.relations.blockedInferences) ? person.relations.blockedInferences : [])].filter((key) => {
-		if(typeof key != `string` || !/^(parents|siblings|children):\d+$/.test(key)){
+		if(typeof key != `string` || !/^(parents|siblings|partners|children):\d+$/.test(key)){
 			return false
 		}
 
@@ -635,6 +647,30 @@ function getDesiredParents(personId) {
 		}
 	}
 
+	// Rule D, the partner of an active biological parent of a person is a step parent of that person, a pair who are married or partners count, a pair who have separated or whose kind is not known do not, and neither does a partner who already has an active biological or non-biological link with the person
+	for(let birthParentId of getActiveBiologicalIds(`parents`, personId)){
+		for(let partnerEntry of persons[birthParentId]?.relations?.partners ?? []){
+			let partnerId = partnerEntry.personId
+
+			if(partnerId == null || partnerId == personId || !persons[partnerId] || hasActiveParentalLink(partnerId, personId)){
+				continue
+			}
+
+			let partnerSubtype = getActivePartnerSubtype(partnerId, birthParentId)
+
+			if(!partnerSubtype){
+				continue
+			}
+
+			addWantedLink(wantedLinks, partnerId, {
+				subtype : `step`,
+				inferenceId : `parents:${personId}:${partnerId}:step`,
+				derivedFrom : [buildDerivationKey(`partners`, partnerId, birthParentId, partnerSubtype), buildDerivationKey(`parents`, personId, birthParentId, `biological`)],
+				note : `Partner of biological parent ${getNameLabel(persons[birthParentId])} (computationally inferred \u2014 verify manually)`
+			})
+		}
+	}
+
 	return wantedLinks
 }
 
@@ -663,7 +699,75 @@ function getDesiredChildren(personId) {
 		}
 	}
 
+	// The other side of rule D, the active biological children of an active partner are step children of the person, with the same exceptions
+	for(let partnerEntry of persons[personId]?.relations?.partners ?? []){
+		let partnerId = partnerEntry.personId
+		let partnerSubtype = partnerId == null ? null : getActivePartnerSubtype(personId, partnerId)
+
+		if(!partnerSubtype){
+			continue
+		}
+
+		for(let childEntry of persons[partnerId]?.relations?.children ?? []){
+			let childId = childEntry.personId
+
+			if(childId == null || childId == personId || !persons[childId] || !isActiveLink(`parents`, childId, partnerId, `biological`) || hasActiveParentalLink(personId, childId)){
+				continue
+			}
+
+			addWantedLink(wantedLinks, childId, {
+				subtype : `step`,
+				inferenceId : `children:${personId}:${childId}:step`,
+				derivedFrom : [buildDerivationKey(`partners`, personId, partnerId, partnerSubtype), buildDerivationKey(`parents`, childId, partnerId, `biological`)],
+				note : `Partner of biological parent ${getNameLabel(persons[partnerId])} (computationally inferred \u2014 verify manually)`
+			})
+		}
+	}
+
 	return wantedLinks
+}
+
+// Rule C, two different people who are both active biological parents of the same child are partners, the kind of link is not known because nothing says whether they are married, the link is the same from both sides because the rule is the same for both
+function getDesiredPartners(personId, context) {
+	let wantedLinks = new Map()
+
+	for(let childId of context.childrenByParent.get(personId) ?? []){
+		if(context.parentMaps.get(childId)?.get(personId) != `biological`){
+			continue
+		}
+
+		for(let [otherParentId, otherSubtype] of context.parentMaps.get(childId)){
+			if(otherParentId == personId || otherSubtype != `biological`){
+				continue
+			}
+
+			addWantedLink(wantedLinks, otherParentId, {
+				subtype : `unknown`,
+				inferenceId : `partners:${personId}:${otherParentId}:unknown`,
+				derivedFrom : [buildDerivationKey(`parents`, childId, personId, `biological`), buildDerivationKey(`parents`, childId, otherParentId, `biological`)],
+				note : `Co-parent of ${getNameLabel(persons[childId])} (computationally inferred \u2014 verify manually)`
+			})
+		}
+	}
+
+	return wantedLinks
+}
+
+// Whether a person already has an active biological or non-biological link with a child, from either side, such a person is a parent in their own right and is never worked out to be a step parent
+function hasActiveParentalLink(parentId, childId) {
+	return [`biological`, `non-biological`].some((subtype) => isActiveLink(`parents`, childId, parentId, subtype) || isActiveLink(`children`, parentId, childId, subtype))
+}
+
+// The kind of an active partner link of a person that makes the partner count for step families, which is married or partner, a link that has separated or whose kind is not known gives null, and so does a link that is not active
+function getActivePartnerSubtype(ownerId, partnerId) {
+	let entry = persons[ownerId] ? findRelationEntry(persons[ownerId], `partners`, partnerId) : null
+	let variant = entry ? getPreferredRelationVariant(entry) : null
+
+	if(!variant || ![`married`, `partner`].includes(variant.subtype) || !isActiveLink(`partners`, ownerId, partnerId, variant.subtype)){
+		return null
+	}
+
+	return variant.subtype
 }
 
 // The kinds of link wanted for one person, a definitive kind, which is biological, half, step or non-biological, wins over unknown, so an unknown one is never wanted next to a definitive one, and a person with nothing wanted gets an empty map
@@ -698,6 +802,12 @@ function reconcileRoleList(person, role, wantedLinks) {
 		}
 
 		let wantedBySubtype = getDefinitiveWantedLinks(wantedLinks.get(entry.personId))
+		let hasManualDefinitive = role == `partners` && entry.variants.some((variant) => !variant.isAutoInferred && variant.subtype != `unknown`)
+
+		if(hasManualDefinitive){
+			wantedBySubtype.delete(`unknown`)
+		}
+
 		let knownWantedSubtypes = [...wantedBySubtype.keys()].filter((subtype) => subtype != `unknown`)
 		let hasDefinitiveWanted = knownWantedSubtypes.length > 0
 		let preferredVariant = entry.variants[entry.preferredVariantIndex]
@@ -748,6 +858,12 @@ function reconcileRoleList(person, role, wantedLinks) {
 			}
 
 			if(isBlocked){
+				hasChanged = true
+
+				continue
+			}
+
+			if(hasManualDefinitive && variant.subtype == `unknown`){
 				hasChanged = true
 
 				continue
@@ -866,6 +982,7 @@ function reconcileRelations(personId, context) {
 	let wantedByRole = {
 		parents : getDesiredParents(personId),
 		siblings : getDesiredSiblings(personId, context),
+		partners : getDesiredPartners(personId, context),
 		children : getDesiredChildren(personId)
 	}
 	let hasChanged = false
@@ -909,6 +1026,28 @@ function getRelationNeighbours(personId, context) {
 		for(let parentEntry of persons[entry.personId]?.relations?.parents ?? []){
 			if(parentEntry.personId != null){
 				neighbourIds.add(parentEntry.personId)
+			}
+		}
+	}
+
+	for(let entry of persons[personId]?.relations?.partners ?? []){
+		for(let childEntry of persons[entry.personId]?.relations?.children ?? []){
+			if(childEntry.personId != null){
+				neighbourIds.add(childEntry.personId)
+			}
+		}
+
+		for(let parentEntry of persons[entry.personId]?.relations?.parents ?? []){
+			if(parentEntry.personId != null){
+				neighbourIds.add(parentEntry.personId)
+			}
+		}
+	}
+
+	for(let entry of persons[personId]?.relations?.parents ?? []){
+		for(let partnerEntry of persons[entry.personId]?.relations?.partners ?? []){
+			if(partnerEntry.personId != null){
+				neighbourIds.add(partnerEntry.personId)
 			}
 		}
 	}
@@ -1055,15 +1194,16 @@ function applyKinshipQualifiers(label, steps, isSiblingLabel) {
 	return steps.some((step) => step.subtype == `non-biological`) ? `${qualifiedLabel} (non-biological)` : qualifiedLabel
 }
 
-// The shortest way from one person to another along active links, a link up is a parent, a link down is a child and a link across is a sibling, a way only climbs, then crosses to a sibling at most once, then only descends, so it never turns down and then climbs again through someone's other parent or partner, which is kept by following the person together with whether the way has turned down yet, a link up is only taken before the turn, a link across is only taken before the turn and is the turn, and a link down is always taken and is the turn, every step costs the same, a link that is not biological costs a little more, so when two ways are equally short the biological one is taken, the answer is the steps with the id of the person each one reaches, or null when there is no way
+// The shortest way from one person to another along active links, a link up is a parent, a link down is a child and a link across is a sibling, a way only climbs, then crosses to a sibling at most once, then only descends, so it never turns down and then climbs again through someone's other parent or partner, which is kept by following the person together with whether the way has turned down yet, a link up is only taken before the turn, a link across is only taken before the turn and is the turn, and a link down is always taken and is the turn, every step costs the same, a link that is not biological costs a little more, so when two ways are equally short the biological one is taken, the answer is the steps with the id of the person each one reaches, or null when there is no way, a way may also start with one partner link, before the blood part, and end with one partner link, after the blood part, but never cross a partner link in the middle, which is kept by following the stage of the way instead of only whether it has turned down, and a way that is only one partner link is a partner link
 function findKinshipPath(startId, targetId) {
-	let startKey = `${startId}:0`
+	let startKey = `${startId}:start`
 	let distances = new Map([[startKey, 0]])
 	let previousSteps = new Map()
 	let visitedKeys = new Set()
 	let kinds = {
 		parents : `up`,
 		siblings : `across`,
+		partners : `partner`,
 		children : `down`
 	}
 	let reachedKey = null
@@ -1081,9 +1221,8 @@ function findKinshipPath(startId, targetId) {
 			return null
 		}
 
-		let [currentIdText, hasTurnedDownText] = currentKey.split(`:`)
+		let [currentIdText, currentStage] = currentKey.split(`:`)
 		let currentId = Number(currentIdText)
-		let hasTurnedDown = hasTurnedDownText == `1`
 
 		if(currentId === targetId){
 			reachedKey = currentKey
@@ -1095,8 +1234,9 @@ function findKinshipPath(startId, targetId) {
 
 		for(let role of relationRoles){
 			let kind = kinds[role]
+			let nextStage = getNextKinshipStage(currentStage, kind)
 
-			if(kind != `down` && hasTurnedDown){
+			if(!nextStage){
 				continue
 			}
 
@@ -1107,7 +1247,7 @@ function findKinshipPath(startId, targetId) {
 					continue
 				}
 
-				let nextKey = `${entry.personId}:${kind == `up` ? 0 : 1}`
+				let nextKey = `${entry.personId}:${nextStage}`
 				let distance = distances.get(currentKey) + 1000 + (variant.subtype == `biological` ? 0 : 1)
 
 				if(!distances.has(nextKey) || distance < distances.get(nextKey)){
@@ -1115,6 +1255,7 @@ function findKinshipPath(startId, targetId) {
 					previousSteps.set(nextKey, {
 						fromKey : currentKey,
 						kind : kind,
+						isPartnerStart : kind == `partner` && currentStage == `start`,
 						subtype : variant.subtype,
 						toId : entry.personId
 					})
@@ -1133,7 +1274,7 @@ function findKinshipPath(startId, targetId) {
 }
 
 // Every way that findKinshipPath answers only climbs, then may cross to a sibling, then only descends, so it is one relationship, counted in generations up and down from the shared ancestor, a crossing counts as one generation up and one down, and the words come from the number of generations and the gender of the person at the end
-function describeKinshipSteps(steps) {
+function describeBloodKinshipSteps(steps) {
 	let hasCrossing = steps.some((step) => step.kind == `across`)
 	let up = steps.filter((step) => step.kind == `up`).length + (hasCrossing ? 1 : 0)
 	let down = steps.filter((step) => step.kind == `down`).length + (hasCrossing ? 1 : 0)
@@ -1155,6 +1296,62 @@ function describeKinshipSteps(steps) {
 	}
 
 	return applyKinshipQualifiers(label, steps, up == 1 && down == 1)
+}
+
+// Where a way is after one more edge, a way starts at start, an edge to a partner at the start gives first, which is before the blood part, up keeps climbing, across and down turn, and an edge to a partner is only taken after the blood part, which gives end and nothing can follow, a way is never allowed to take a partner edge from first, because that would be two partner edges with no blood relationship between them, the answer is null when the edge is not allowed
+function getNextKinshipStage(stage, kind) {
+	if(stage == `end`){
+		return null
+	}
+
+	if(kind == `partner`){
+		if(stage == `start`){
+			return `first`
+		}
+
+		return stage == `climb` || stage == `turned` ? `end` : null
+	}
+
+	if(kind == `up`){
+		return stage == `turned` ? null : `climb`
+	}
+
+	if(kind == `across`){
+		return stage == `turned` ? null : `turned`
+	}
+
+	return `turned`
+}
+
+// A married pair are spouses, a pair who have separated are ex-partners, and every other pair, including one whose kind of link is not known, are partners
+function getPartnerKinshipWord(subtype) {
+	if(subtype == `married`){
+		return `Spouse`
+	}
+
+	return subtype == `separated` ? `Ex-partner` : `Partner`
+}
+
+// A way of one partner edge is just the word for it, any other way is described as the blood part, as before, with the partner word of the start in front and the partner word of the end behind, joined with possessives, such as Partner\u2019s grandfather, Grandfather\u2019s partner, Son\u2019s spouse and Partner\u2019s cousin
+function describeKinshipSteps(steps) {
+	if(steps.length == 1 && steps[0].kind == `partner`){
+		return getPartnerKinshipWord(steps[0].subtype)
+	}
+
+	let startStep = steps[0].kind == `partner` ? steps[0] : null
+	let endStep = steps.at(-1).kind == `partner` ? steps.at(-1) : null
+	let bloodSteps = steps.filter((step) => step.kind != `partner`)
+	let parts = [describeBloodKinshipSteps(bloodSteps)]
+
+	if(startStep){
+		parts.unshift(getPartnerKinshipWord(startStep.subtype))
+	}
+
+	if(endStep){
+		parts.push(getPartnerKinshipWord(endStep.subtype))
+	}
+
+	return parts.map((part, index) => index == 0 ? part : lowercaseFirst(part)).join(`\u2019s `)
 }
 
 // How a person is related to the person on screen, for the search results, found along the shortest path of active links whatever the number of generations, a person who is not related in any way that is recorded is just a Person
@@ -1540,6 +1737,29 @@ let addRelationDraft = {
 function collectPreviousCoParents() {
 	let previousCoParents = []
 	let seenKeys = new Set()
+
+	for(let entry of relationsDraft.entries.partners){
+		let candidate = entry.personId != null ? { personId : entry.personId } : entry.isNew ? {
+			isNew : true,
+			firstName : entry.firstName ?? null,
+			lastName : entry.lastName ?? null,
+			gender : entry.gender ?? null,
+			birth : entry.birth ?? null,
+			death : entry.death ?? null,
+			isDeceased : entry.isDeceased ?? false
+		} : { text : entry.text }
+
+		if(candidate.personId !== undefined && (!persons[candidate.personId] || candidate.personId === relationsDraft.personId)){
+			continue
+		}
+
+		let key = getCoParentKey(candidate)
+
+		if(!seenKeys.has(key)){
+			seenKeys.add(key)
+			previousCoParents.push(candidate)
+		}
+	}
 
 	for(let entry of relationsDraft.entries.children){
 		if(entry.personId == null && !entry.isNew){
