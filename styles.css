@@ -35,6 +35,7 @@ body{
 		position: sticky;
 		top: .5em;
 		width: 100%;
+		z-index: 10;
 		>div{
 			display: flex;
 			gap: .5em;
