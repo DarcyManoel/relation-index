@@ -511,14 +511,9 @@ function buildInferenceContext() {
 	}
 }
 
-// Two parents of different gender, one for each of two children, are what makes a shared parent a half sibling link, the gender is the starred one, anything else cannot be told apart from a half sibling who is not a real one, so it stays unknown
-function areOtherParentsOpposite(firstParentIds, secondParentIds) {
-	return firstParentIds.some((firstParentId) => secondParentIds.some((secondParentId) => {
-		let firstGender = getPreferredGender(persons[firstParentId])?.value
-		let secondGender = getPreferredGender(persons[secondParentId])?.value
-
-		return firstParentId != secondParentId && ((firstGender == `male` && secondGender == `female`) || (firstGender == `female` && secondGender == `male`))
-	}))
+// Each of two children having another biological parent of their own, and those being different people, is what makes a shared parent a half sibling link, all four places for a biological parent are then taken and only one of them is the same, the gender of the parents does not matter, a child who has no other biological parent recorded leaves it open whether the two share that parent as well, so the link stays unknown
+function areOtherParentsDistinct(firstParentIds, secondParentIds) {
+	return firstParentIds.some((firstParentId) => secondParentIds.some((secondParentId) => firstParentId != secondParentId))
 }
 
 // A parent that was worked out from the sibling link between the person and the other one says nothing about that same link, so it is not counted as a shared parent for those two
@@ -537,7 +532,7 @@ function isParentDerivedFromPair(personId, parentId, otherId) {
 	})
 }
 
-// Two people who share two biological parents are full siblings, who share only one are half siblings when their other biological parents are known to be a man and a woman and are unknown otherwise, and who share no biological parent but share a parent that is a step or non-biological parent for one of them are step siblings
+// Two people who share two biological parents are full siblings, who share only one are half siblings when each of them has another biological parent of their own and those are different people, and are unknown otherwise, and who share no biological parent but share a parent that is a step or non-biological parent for one of them are step siblings
 function getExpectedSibling(firstId, secondId, context) {
 	let firstParents = context.parentMaps.get(firstId)
 	let secondParents = context.parentMaps.get(secondId)
@@ -556,7 +551,7 @@ function getExpectedSibling(firstId, secondId, context) {
 		let firstOtherIds = [...firstParents].filter(([parentId, parentSubtype]) => parentSubtype == `biological` && parentId != sharedBiologicalIds[0]).map(([parentId]) => parentId)
 		let secondOtherIds = [...secondParents].filter(([parentId, parentSubtype]) => parentSubtype == `biological` && parentId != sharedBiologicalIds[0]).map(([parentId]) => parentId)
 
-		subtype = areOtherParentsOpposite(firstOtherIds, secondOtherIds) ? `half` : `unknown`
+		subtype = areOtherParentsDistinct(firstOtherIds, secondOtherIds) ? `half` : `unknown`
 	}
 
 	let namedParentId = sharedBiologicalIds[0] ?? sharedIds[0]
@@ -1048,6 +1043,16 @@ function getRelationNeighbours(personId, context) {
 		for(let partnerEntry of persons[entry.personId]?.relations?.partners ?? []){
 			if(partnerEntry.personId != null){
 				neighbourIds.add(partnerEntry.personId)
+			}
+		}
+	}
+
+	for(let childId of context.childrenByParent.get(personId) ?? []){
+		neighbourIds.add(childId)
+
+		for(let childParentId of context.parentMaps.get(childId)?.keys() ?? []){
+			for(let siblingId of context.childrenByParent.get(childParentId) ?? []){
+				neighbourIds.add(siblingId)
 			}
 		}
 	}
