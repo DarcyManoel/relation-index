@@ -1,3 +1,11 @@
+@keyframes invalidPulse{
+	0%{
+		box-shadow: 0 0 0 .22em rgba(220, 38, 38, .85);
+	}
+	100%{
+		box-shadow: 0 0 0 .08em rgba(220, 38, 38, .85);
+	}
+}
 ::-webkit-scrollbar{
 	display: none;
 }
@@ -708,6 +716,9 @@ body{
 		&#nameDialog{
 			width: min(24em, calc(100vw - 2em));
 		}
+		&#newPersonDialog{
+			width: min(26em, calc(100vw - 2em));
+		}
 		&#addRelationDialog,
 		&#importDialog,
 		&#relationsDialog{
@@ -790,6 +801,7 @@ body{
 			}
 			>.issue,
 			.newPersonFields>.issue{
+				color: #dc2626;
 				font-size: .8em;
 				font-weight: bold;
 				&:empty{
@@ -832,11 +844,11 @@ body{
 					}
 				}
 			}
-			>.description{
-				color: grey;
-				font-size: .8em;
-				min-height: 3.6em;
-				&:empty{
+			>.linkInputs{
+				display: flex;
+				flex-direction: column;
+				gap: .35em;
+				&[hidden]{
 					display: none;
 				}
 			}
@@ -1024,6 +1036,10 @@ body{
 					display: none;
 				}
 			}
+			>#newPersonFields{
+				border-left: none;
+				padding-left: 0;
+			}
 			>.dateInputs,
 			>.nameInputs,
 			.newPersonFields>.dateInputs,
@@ -1070,6 +1086,10 @@ body{
 				&:focus{
 					background: rgba(200, 200, 200, .5);
 					border-radius: 1em;
+				}
+				&.invalid{
+					animation: invalidPulse .45s ease-out forwards;
+					box-shadow: 0 0 0 .08em rgba(220, 38, 38, .85);
 				}
 			}
 			>.buttons{

@@ -42,18 +42,14 @@
 			<div id="relations"></div>
 		</div>
 		<dialog id="nameDialog">
-			<form onsubmit="saveName(event)" oninput="updateNameDialog()">
+			<form onsubmit="saveName(event)" oninput="updateNameDialog()" novalidate>
 				<div class="title" id="nameTitle"></div>
 				<div class="nameInputs">
 					<label class="first"><span class="name">First name</span><input id="nameFirst" type="text" autocomplete="off"></label>
 					<label class="last"><span class="name">Last name</span><input id="nameLast" type="text" autocomplete="off"></label>
 				</div>
-				<div class="heading">Source order</div>
-				<input id="nameOrder" type="hidden">
-				<div class="choices" id="nameOrderChoices"></div>
-				<div class="description" id="nameOrderDescription"></div>
-				<input id="nameLink" type="text" placeholder="Link (optional)" autocomplete="off" autocapitalize="off" spellcheck="false">
 				<input id="nameNote" type="text" placeholder="Note (optional)" autocomplete="off">
+				<div class="linkInputs" id="nameLinks"></div>
 				<div class="issue" id="nameIssue"></div>
 				<div class="list" id="nameList"></div>
 				<div class="buttons">
@@ -62,17 +58,24 @@
 				</div>
 			</form>
 		</dialog>
+		<dialog id="newPersonDialog">
+			<form onsubmit="saveNewPerson(event)" oninput="updateNewPersonDialog()">
+				<div class="title">New person</div>
+				<div class="newPersonFields" id="newPersonFields"></div>
+				<div class="buttons">
+					<button type="button" onclick="closeNewPerson()">Cancel</button>
+					<button type="submit">Create</button>
+				</div>
+				<div class="issue" id="newPersonIssue"></div>
+			</form>
+		</dialog>
 		<dialog id="genderDialog">
-			<form onsubmit="saveGender(event)" oninput="updateGenderDialog()">
+			<form onsubmit="saveGender(event)" oninput="updateGenderDialog()" novalidate>
 				<div class="title">Gender</div>
 				<input id="genderValue" type="hidden">
 				<div class="choices" id="genderValueChoices"></div>
-				<div class="heading">Source order</div>
-				<input id="genderOrder" type="hidden">
-				<div class="choices" id="genderOrderChoices"></div>
-				<div class="description" id="genderOrderDescription"></div>
-				<input id="genderLink" type="text" placeholder="Link (optional)" autocomplete="off" autocapitalize="off" spellcheck="false">
 				<input id="genderNote" type="text" placeholder="Note (optional)" autocomplete="off">
+				<div class="linkInputs" id="genderLinks"></div>
 				<div class="list" id="genderList"></div>
 				<div class="buttons">
 					<button type="button" onclick="closeGender()">Cancel</button>
@@ -81,7 +84,7 @@
 			</form>
 		</dialog>
 		<dialog id="dateDialog">
-			<form onsubmit="saveDate(event)" oninput="updateDateDialog()">
+			<form onsubmit="saveDate(event)" oninput="updateDateDialog()" novalidate>
 				<div class="tabs">
 					<button type="button" id="birthTab" onclick="switchDateKind(`birth`)">Birth</button>
 					<button type="button" id="deathTab" onclick="switchDateKind(`death`)">Death</button>
@@ -91,12 +94,8 @@
 					<label class="month"><span class="name">Month</span><input id="dateMonth" type="text" inputmode="numeric" maxlength="2" autocomplete="off"></label>
 					<label class="year"><span class="name">Year</span><input id="dateYear" type="text" inputmode="numeric" maxlength="4" autocomplete="off"></label>
 				</div>
-				<div class="heading">Source order</div>
-				<input id="dateOrder" type="hidden">
-				<div class="choices" id="dateOrderChoices"></div>
-				<div class="description" id="dateOrderDescription"></div>
-				<input id="dateLink" type="text" placeholder="Link (optional)" autocomplete="off" autocapitalize="off" spellcheck="false">
 				<input id="dateNote" type="text" placeholder="Note (optional)" autocomplete="off">
+				<div class="linkInputs" id="dateLinks"></div>
 				<label class="checkbox" id="deceasedLabel"><input id="dateDeceased" type="checkbox">Deceased, date unknown</label>
 				<div class="issue" id="dateIssue"></div>
 				<div class="list" id="dateList"></div>
@@ -107,7 +106,7 @@
 			</form>
 		</dialog>
 		<dialog id="relationsDialog">
-			<form onsubmit="saveRelations(event)" oninput="updateRelationsDialog(event)">
+			<form onsubmit="saveRelations(event)" oninput="updateRelationsDialog(event)" novalidate>
 				<div class="title">Relations</div>
 				<div class="tabs">
 					<button type="button" id="parentsTab" onclick="switchRelationsRole(`parents`)">Parents</button>
@@ -119,11 +118,8 @@
 				<div class="list" id="relationsVariants"></div>
 				<div class="heading" id="relationsSubtypeHeading"></div>
 				<div class="choices" id="relationsSubtypeChoices"></div>
-				<div class="heading" id="relationsOrderHeading"></div>
-				<div class="choices" id="relationsOrderChoices"></div>
-				<div class="description" id="relationsOrderDescription"></div>
-				<input id="relationsLink" type="text" placeholder="Link (optional)" autocomplete="off" autocapitalize="off" spellcheck="false">
 				<input id="relationsNote" type="text" placeholder="Note (optional)" autocomplete="off">
+				<div class="linkInputs" id="relationsLinks"></div>
 				<div class="coParentEditor" id="relationsCoParentEditor" hidden>
 					<div class="heading">Other parent (optional)</div>
 					<div class="list" id="relationsCoParentSelected"></div>
@@ -143,67 +139,22 @@
 				<div class="list" id="addRelationSelected"></div>
 				<input id="addRelationSearch" type="text" placeholder="Search a person or type a name..." autocomplete="off" onkeydown="handleAddRelationSearchKey(event)">
 				<div class="list suggestions" id="addRelationSuggestions"></div>
-				<div class="newPersonFields" id="addRelationNewPersonFields" hidden>
-					<div class="nameInputs">
-						<label class="first"><span class="name">First name</span><input id="addTargetNewFirst" type="text" autocomplete="off"></label>
-						<label class="last"><span class="name">Last name</span><input id="addTargetNewLast" type="text" autocomplete="off"></label>
-					</div>
-					<div class="heading">Gender</div>
-					<div class="choices" id="addTargetNewGenderChoices"></div>
-					<div class="heading">Birth</div>
-					<div class="dateInputs">
-						<label class="day"><span class="name">Day</span><input id="addTargetNewBirthDay" type="text" inputmode="numeric" maxlength="2" autocomplete="off"></label>
-						<label class="month"><span class="name">Month</span><input id="addTargetNewBirthMonth" type="text" inputmode="numeric" maxlength="2" autocomplete="off"></label>
-						<label class="year"><span class="name">Year</span><input id="addTargetNewBirthYear" type="text" inputmode="numeric" maxlength="4" autocomplete="off"></label>
-					</div>
-					<div class="heading">Death</div>
-					<div class="dateInputs">
-						<label class="day"><span class="name">Day</span><input id="addTargetNewDeathDay" type="text" inputmode="numeric" maxlength="2" autocomplete="off"></label>
-						<label class="month"><span class="name">Month</span><input id="addTargetNewDeathMonth" type="text" inputmode="numeric" maxlength="2" autocomplete="off"></label>
-						<label class="year"><span class="name">Year</span><input id="addTargetNewDeathYear" type="text" inputmode="numeric" maxlength="4" autocomplete="off"></label>
-					</div>
-					<label class="checkbox"><input id="addTargetNewDeceased" type="checkbox">Deceased, date unknown</label>
-					<div class="issue" id="addTargetNewIssue"></div>
-				</div>
+				<div class="newPersonFields" id="addRelationNewPersonFields" hidden></div>
 				<div class="coParentEditor" id="addCoParentSection" hidden>
 					<div class="heading">Other parent (optional)</div>
 					<div class="choices" id="addPreviousCoParents"></div>
 					<div class="list" id="addCoParentSelected"></div>
 					<input id="addCoParentSearch" type="text" placeholder="Name of other parent&hellip;" autocomplete="off" onkeydown="handleAddCoParentSearchKey(event)">
 					<div class="list suggestions" id="addCoParentSuggestions"></div>
-					<div class="newPersonFields" id="addCoParentNewPersonFields" hidden>
-						<div class="nameInputs">
-							<label class="first"><span class="name">First name</span><input id="addCoParentNewFirst" type="text" autocomplete="off"></label>
-							<label class="last"><span class="name">Last name</span><input id="addCoParentNewLast" type="text" autocomplete="off"></label>
-						</div>
-						<div class="heading">Gender</div>
-						<div class="choices" id="addCoParentNewGenderChoices"></div>
-						<div class="heading">Birth</div>
-						<div class="dateInputs">
-							<label class="day"><span class="name">Day</span><input id="addCoParentNewBirthDay" type="text" inputmode="numeric" maxlength="2" autocomplete="off"></label>
-							<label class="month"><span class="name">Month</span><input id="addCoParentNewBirthMonth" type="text" inputmode="numeric" maxlength="2" autocomplete="off"></label>
-							<label class="year"><span class="name">Year</span><input id="addCoParentNewBirthYear" type="text" inputmode="numeric" maxlength="4" autocomplete="off"></label>
-						</div>
-						<div class="heading">Death</div>
-						<div class="dateInputs">
-							<label class="day"><span class="name">Day</span><input id="addCoParentNewDeathDay" type="text" inputmode="numeric" maxlength="2" autocomplete="off"></label>
-							<label class="month"><span class="name">Month</span><input id="addCoParentNewDeathMonth" type="text" inputmode="numeric" maxlength="2" autocomplete="off"></label>
-							<label class="year"><span class="name">Year</span><input id="addCoParentNewDeathYear" type="text" inputmode="numeric" maxlength="4" autocomplete="off"></label>
-						</div>
-						<label class="checkbox"><input id="addCoParentNewDeceased" type="checkbox">Deceased, date unknown</label>
-						<div class="issue" id="addCoParentNewIssue"></div>
-					</div>
+					<div class="newPersonFields" id="addCoParentNewPersonFields" hidden></div>
 				</div>
 				<div class="heading">Kind of link</div>
 				<div class="choices" id="addRelationSubtypeChoices"></div>
-				<div class="heading">Source order</div>
-				<div class="choices" id="addRelationOrderChoices"></div>
-				<div class="description" id="addRelationOrderDescription"></div>
-				<div class="issue" id="addRelationIssue"></div>
 				<div class="buttons">
 					<button type="button" onclick="closeAddRelationDialog()">Cancel</button>
 					<button type="submit">Add</button>
 				</div>
+				<div class="issue" id="addRelationIssue"></div>
 			</form>
 		</dialog>
 		<dialog id="importDialog">

@@ -33,11 +33,257 @@ function escapeHtml(text) {
 		.replaceAll(`"`, `&quot;`)
 }
 
-// Adding a person opens the name dialog first and the person only exists once a name is saved, so saving with no name entered, cancelling and closing the dialog all leave nothing behind
-function addPerson() {
-	isCreatingPerson = true
+// What the new person dialog is filled from and read back into, the same shape as a person who is being added from the relations dialog, { firstName, lastName, gender, birth, death, isDeceased }, gender is the value of one of the genderOptions or null, and birth and death are { day, month, year } as typed or null when nothing was typed
+let newPersonDraft = {
+	firstName : null,
+	lastName : null,
+	gender : null,
+	birth : null,
+	death : null,
+	isDeceased : false
+}
+let personCreateNameIssue = `A person needs a first or last name.`
 
-	openNameDialog(`New person`, getNameDraft(null))
+function getBlankPersonCreateState() {
+	return {
+		firstName : null,
+		lastName : null,
+		gender : null,
+		birth : null,
+		death : null,
+		isDeceased : false
+	}
+}
+
+// One row of day, month and year boxes, the ids start with the prefix of the form so one page can hold several of these forms at once
+function buildPersonCreateDateHtml(prefix, kind, date) {
+	return `<div class="dateInputs"><label class="day"><span class="name">Day</span><input id="${prefix}${kind}Day" type="text" inputmode="numeric" maxlength="2" autocomplete="off" value="${escapeHtml(date?.day ?? ``)}"></label><label class="month"><span class="name">Month</span><input id="${prefix}${kind}Month" type="text" inputmode="numeric" maxlength="2" autocomplete="off" value="${escapeHtml(date?.month ?? ``)}"></label><label class="year"><span class="name">Year</span><input id="${prefix}${kind}Year" type="text" inputmode="numeric" maxlength="4" autocomplete="off" value="${escapeHtml(date?.year ?? ``)}"></label></div>`
+}
+
+// The gender values are a row of small buttons, the chosen one is kept in a hidden box of the form so it can be read like any other box
+function buildPersonCreateGenderHtml(prefix, genderValue) {
+	return genderOptions
+		.map((option, index) => `<div class="choice${option.value === genderValue ? ` selected` : ``}" onclick="choosePersonCreateGender('${prefix}', ${index})">${option.label}</div>`)
+		.join(``)
+}
+
+// The one set of boxes for making a person, a first and a last name, a gender, a birth date, a death date and the mark that the person is deceased with no date, there is no source, link or note, the new person dialog and both quick-create panels of the relations dialog are built from this, so they look and behave the same, the html is only built when a form opens, because building it again while typing would take the cursor away
+function buildPersonCreateHtml(prefix, state) {
+	return `<div class="nameInputs"><label class="first"><span class="name">First name</span><input id="${prefix}First" type="text" autocomplete="off" value="${escapeHtml(state.firstName ?? ``)}"></label><label class="last"><span class="name">Last name</span><input id="${prefix}Last" type="text" autocomplete="off" value="${escapeHtml(state.lastName ?? ``)}"></label></div><div class="heading">Gender</div><input id="${prefix}Gender" type="hidden" value="${escapeHtml(state.gender ?? ``)}"><div class="choices" id="${prefix}GenderChoices">${buildPersonCreateGenderHtml(prefix, state.gender)}</div><div class="heading">Birth</div>${buildPersonCreateDateHtml(prefix, `Birth`, state.birth)}<div class="heading">Death</div>${buildPersonCreateDateHtml(prefix, `Death`, state.death)}<label class="checkbox"><input id="${prefix}Deceased" type="checkbox"${state.isDeceased ? ` checked` : ``}>Deceased, date unknown</label>`
+}
+
+// Reads the boxes of one form, a date with nothing typed is no date, and a death date makes the deceased box meaningless, so it counts as not checked
+function readPersonCreateState(prefix) {
+	let readBox = (suffix) => document.getElementById(`${prefix}${suffix}`).value.trim()
+	let readDate = (suffix) => {
+		let date = {
+			day : readBox(`${suffix}Day`),
+			month : readBox(`${suffix}Month`),
+			year : readBox(`${suffix}Year`)
+		}
+
+		return Object.values(date).every((part) => part == ``) ? null : date
+	}
+	let death = readDate(`Death`)
+
+	return {
+		firstName : readBox(`First`) || null,
+		lastName : readBox(`Last`) || null,
+		gender : readBox(`Gender`) || null,
+		birth : readDate(`Birth`),
+		death : death,
+		isDeceased : !death && document.getElementById(`${prefix}Deceased`).checked
+	}
+}
+
+// A person needs a first or a last name, and a date that is typed has to be a real one, the same as in the date dialog, the answer is what is wrong, or an empty text
+function getPersonCreateIssue(state) {
+	if(!state.firstName && !state.lastName){
+		return personCreateNameIssue
+	}
+
+	for(let [label, date] of [[`Birth`, state.birth], [`Death`, state.death]]){
+		let issue = date ? getDateIssue(date.day, date.month, date.year) : ``
+
+		if(issue != ``){
+			return `${label}: ${issue}`
+		}
+	}
+
+	return ``
+}
+
+// The new person dialog writes what is wrong below its buttons, and every form of the add dialog writes it below the buttons of that dialog
+function getPersonCreateIssueId(prefix) {
+	return prefix == `newPerson` ? `newPersonIssue` : `addRelationIssue`
+}
+
+// Writes what is wrong under the buttons, and when it is the missing name both name boxes get the red border that pulses once, taking the class off and putting it back after a redraw is what starts the pulse again when the boxes were already red, an empty text clears everything, label is put in front of the text for a form that is not the main one, the text shown is remembered so typing a name can take away that text and no other
+function showPersonCreateIssue(prefix, issue, label = ``) {
+	let issueElement = document.getElementById(getPersonCreateIssueId(prefix))
+	let nameInputs = [`First`, `Last`].map((suffix) => document.getElementById(`${prefix}${suffix}`))
+
+	for(let nameInput of nameInputs){
+		nameInput.classList.remove(`invalid`)
+	}
+
+	if(issue == personCreateNameIssue){
+		void nameInputs[0].offsetWidth
+
+		for(let nameInput of nameInputs){
+			nameInput.classList.add(`invalid`)
+		}
+	}
+
+	issueElement.textContent = issue == `` ? `` : `\u26a0 ${label}${issue}`
+
+	if(issue == personCreateNameIssue){
+		issueElement.dataset.nameIssuePrefix = prefix
+		issueElement.dataset.nameIssueText = issueElement.textContent
+	} else {
+		delete issueElement.dataset.nameIssuePrefix
+		delete issueElement.dataset.nameIssueText
+	}
+}
+
+// Keeps a form up to date while it is typed in, the deceased box is disabled and cleared while any part of a death date is typed, the same as in the date dialog, and typing a first or a last name takes the red border off both name boxes and the missing name text away, a form whose boxes are not built yet is left alone
+function updatePersonCreateForm(prefix) {
+	let deceasedElement = document.getElementById(`${prefix}Deceased`)
+
+	if(!deceasedElement){
+		return
+	}
+
+	let hasDeathPart = [`Day`, `Month`, `Year`].some((suffix) => document.getElementById(`${prefix}Death${suffix}`).value.trim() != ``)
+
+	deceasedElement.disabled = hasDeathPart
+
+	if(hasDeathPart){
+		deceasedElement.checked = false
+	}
+
+	let nameInputs = [`First`, `Last`].map((suffix) => document.getElementById(`${prefix}${suffix}`))
+
+	if(nameInputs.some((nameInput) => nameInput.value.trim() != ``)){
+		for(let nameInput of nameInputs){
+			nameInput.classList.remove(`invalid`)
+		}
+
+		let issueElement = document.getElementById(getPersonCreateIssueId(prefix))
+
+		if(issueElement.dataset.nameIssuePrefix == prefix && issueElement.textContent == issueElement.dataset.nameIssueText){
+			issueElement.textContent = ``
+		}
+	}
+}
+
+// Choosing the gender that is already chosen clears it again
+function choosePersonCreateGender(prefix, index) {
+	let genderInput = document.getElementById(`${prefix}Gender`)
+
+	genderInput.value = genderInput.value == genderOptions[index].value ? `` : genderOptions[index].value
+
+	document.getElementById(`${prefix}GenderChoices`).innerHTML = buildPersonCreateGenderHtml(prefix, genderInput.value)
+}
+
+// Makes the page for a person from the state of a form and answers the id of the new person, the new person has the next free id, a gender, a date, or the mark that they are deceased is only there when it was given, and none of it has a link or a note
+function createPersonRecord(state) {
+	let ids = Object.keys(persons).map(Number)
+	let newId = ids.length > 0 ? Math.max(...ids) + 1 : 1
+	let newPerson = {
+		names : {
+			preferredVariantIndex : 0,
+			variants : [
+				{
+					firstName : state.firstName || null,
+					lastName : state.lastName || null,
+					links : [],
+					note : null
+				}
+			]
+		}
+	}
+
+	if(genderOptions.some((option) => option.value === state.gender)){
+		newPerson.gender = {
+			preferredVariantIndex : 0,
+			variants : [
+				{
+					value : state.gender,
+					links : [],
+					note : null
+				}
+			]
+		}
+	}
+
+	for(let kind of [`birth`, `death`]){
+		let date = state[kind]
+
+		if(date){
+			newPerson[kind] = {
+				preferredVariantIndex : 0,
+				variants : [
+					{
+						year : date.year == `` ? null : Number(date.year),
+						month : date.month == `` ? null : Number(date.month),
+						day : date.day == `` ? null : Number(date.day),
+						links : [],
+						note : null
+					}
+				]
+			}
+		}
+	}
+
+	if(state.isDeceased && !newPerson.death){
+		newPerson.isDeceased = true
+	}
+
+	persons[newId] = newPerson
+
+	return newId
+}
+
+// Adding a person opens a dialog with the same boxes as the quick-create panels of the relations dialog, the person only exists once Create is pressed with a valid form, so cancelling and closing the dialog leave nothing behind
+function addPerson() {
+	newPersonDraft = getBlankPersonCreateState()
+
+	document.getElementById(`newPersonFields`).innerHTML = buildPersonCreateHtml(`newPerson`, newPersonDraft)
+	document.getElementById(`newPersonIssue`).textContent = ``
+
+	updatePersonCreateForm(`newPerson`)
+
+	document.getElementById(`newPersonDialog`).showModal()
+}
+
+function closeNewPerson() {
+	document.getElementById(`newPersonDialog`).close()
+}
+
+// Every keystroke keeps the deceased box and the red name boxes up to date
+function updateNewPersonDialog() {
+	updatePersonCreateForm(`newPerson`)
+}
+
+// A form that is not valid stays open and says why under the buttons, otherwise the person is made, the dialog closes and the new person is shown, which also saves
+function saveNewPerson(event) {
+	event.preventDefault()
+
+	newPersonDraft = readPersonCreateState(`newPerson`)
+
+	let issue = getPersonCreateIssue(newPersonDraft)
+
+	if(issue != ``){
+		showPersonCreateIssue(`newPerson`, issue)
+
+		return
+	}
+
+	let newId = createPersonRecord(newPersonDraft)
+
+	closeNewPerson()
+	viewPerson(newId)
 }
 
 // The window prompt is a confirm so nothing is removed unless OK is pressed, then every visit to that person is taken out of the history so viewPerson falls back to the person viewed before them
@@ -255,7 +501,7 @@ function handleSearchKey(event) {
 	}
 }
 
-// A birth or a death is a list of entered dates because sources disagree, each entry is { year, month, day, order, link, note } with null for every part that is not known, order saying how close the source is and link and note being optional, preferredVariantIndex is the starred entry that the person's page shows, and a person with no entered dates has no such property at all
+// A birth or a death is a list of entered dates because sources disagree, each entry is { year, month, day, links, note } with null for every part that is not known, links being a list of web addresses and note being optional, preferredVariantIndex is the starred entry that the person's page shows, and a person with no entered dates has no such property at all
 let monthNames = [`Jan`, `Feb`, `Mar`, `Apr`, `May`, `Jun`, `Jul`, `Aug`, `Sep`, `Oct`, `Nov`, `Dec`]
 let monthFullNames = [`January`, `February`, `March`, `April`, `May`, `June`, `July`, `August`, `September`, `October`, `November`, `December`]
 let editedDateKind = `birth`
@@ -267,40 +513,6 @@ let dateDraft = {
 	preferredVariantIndex : 0,
 	selectedIndex : 0
 }
-
-// The orders of source from the closest to the person to the furthest away, each has a name, a short label and a description of what kind of source it is
-let sourceOrders = [
-	{
-		order : 1,
-		name : `1st order`,
-		label : `Direct`,
-		description : `Told by the person themselves, or read from an official document you have seen, such as a certificate, passport or gravestone.`
-	},
-	{
-		order : 2,
-		name : `2nd order`,
-		label : `Witness`,
-		description : `Told by someone who was there or is very close to them, such as a parent, partner, sibling or child.`
-	},
-	{
-		order : 3,
-		name : `3rd order`,
-		label : `Second hand`,
-		description : `Told by someone who heard it from another person, such as a friend, a colleague or wider family.`
-	},
-	{
-		order : 4,
-		name : `4th order`,
-		label : `Hearsay`,
-		description : `A rumour, a vague memory, or something posted with no source.`
-	},
-	{
-		order : 5,
-		name : `5th order`,
-		label : `Inferred`,
-		description : `Worked out from other facts, such as "was 30 in 1980".`
-	}
-]
 
 // A person who is not marked as deceased and who must be at least this old is flagged as improbably old
 let improbableAge = 110
@@ -319,8 +531,95 @@ function getLinkLabel(url) {
 	}
 }
 
-function getSourceOrder(order) {
-	return sourceOrders.find((sourceOrder) => sourceOrder.order === order)
+// The optional note and links go on a second line of an entry, the note first and then every link, a link is only clickable when it is a web address, and clicking it must not also select the entry, every kind of entry draws its second line here
+function buildVariantExtraHtml(variant) {
+	let extraParts = []
+
+	if(variant.note){
+		extraParts.push(escapeHtml(variant.note))
+	}
+
+	for(let link of variant.links ?? []){
+		extraParts.push(isWebAddress(link)
+			? `<a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${escapeHtml(getLinkLabel(link))}</a>`
+			: escapeHtml(link))
+	}
+
+	return extraParts.length > 0 ? `<span class="extra">${extraParts.join(` \u00b7 `)}</span>` : ``
+}
+
+// The links of a source are a list of texts that are not empty, a source saved by an older version has a single link, which becomes a list of one, and anything else is dropped
+function sanitizeLinks(variant) {
+	let links = Array.isArray(variant.links) ? variant.links : typeof variant.link == `string` ? [variant.link] : []
+
+	return links
+		.filter((link) => typeof link == `string` && link.trim() != ``)
+		.map((link) => link.trim())
+}
+
+// A source saved with a single link gets a list of links with that link in it, and the source order that is not used any more is dropped, this is done on the source itself so a person who is loaded is fixed in place
+function migrateVariantLinks(variant) {
+	variant.links = sanitizeLinks(variant)
+
+	delete variant.link
+	delete variant.order
+}
+
+// A source can have any number of links, each one has its own box, the boxes are built here and read back by readDynamicLinks whenever the dialog needs them, there is always one empty box at the bottom so the next link can be typed straight away
+function createLinkInput(link) {
+	let input = document.createElement(`input`)
+
+	input.type = `url`
+	input.placeholder = `Link (optional)`
+	input.value = link
+	input.autocomplete = `off`
+	input.autocapitalize = `off`
+	input.spellcheck = false
+
+	return input
+}
+
+// The links typed in the boxes of one container, every link is trimmed and the empty boxes are left out
+function readDynamicLinks(containerId) {
+	return [...document.getElementById(containerId).children]
+		.map((input) => input.value.trim())
+		.filter((link) => link != ``)
+}
+
+// Shows one box for every link and one empty box after them, typing in the empty box at the bottom adds another empty box below it, and leaving an earlier empty box removes the extra empty boxes so there is never more than one at the bottom, onChange gets the list of links after every keystroke, the typing is not passed on to the form because onChange is what the dialog updates itself with, when the boxes already hold these links they are left alone so a drawing during typing never takes the cursor away, and the handlers are taken off while the boxes are replaced because taking a box out of the page counts as leaving it
+function renderDynamicLinks(containerId, links, onChange) {
+	let container = document.getElementById(containerId)
+
+	container.oninput = null
+	container.onfocusout = null
+
+	let isUpToDate = container.children.length > 0 && container.lastElementChild.value.trim() == `` && JSON.stringify(readDynamicLinks(containerId)) == JSON.stringify(links)
+
+	if(!isUpToDate){
+		container.replaceChildren(...[...links, ``].map(createLinkInput))
+	}
+
+	container.oninput = (event) => {
+		event.stopPropagation()
+
+		if(container.lastElementChild.value.trim() != ``){
+			container.append(createLinkInput(``))
+		}
+
+		onChange(readDynamicLinks(containerId))
+	}
+
+	container.onfocusout = () => {
+		for(let input of [...container.children].slice(0, -1)){
+			if(input.value.trim() == ``){
+				input.remove()
+			}
+		}
+
+		if(container.lastElementChild && container.lastElementChild.value.trim() != ``){
+			container.append(createLinkInput(``))
+		}
+	}
 }
 
 function getBlankDate() {
@@ -328,8 +627,7 @@ function getBlankDate() {
 		year : null,
 		month : null,
 		day : null,
-		order : null,
-		link : null,
+		links : [],
 		note : null
 	}
 }
@@ -338,7 +636,7 @@ function isDateEmpty(date) {
 	return date.year == null && date.month == null && date.day == null
 }
 
-// Dates saved before there were lists were a single { year, month, day }, they become a list of one entry with no source order
+// Dates saved before there were lists were a single { year, month, day }, they become a list of one entry, and every entry that is saved with a single link gets a list of links instead
 function migrateDates(person) {
 	for(let kind of [`birth`, `death`]){
 		if(person[kind] && !Array.isArray(person[kind].variants)){
@@ -349,11 +647,16 @@ function migrateDates(person) {
 						year : person[kind].year ?? null,
 						month : person[kind].month ?? null,
 						day : person[kind].day ?? null,
-						order : null,
-						link : null,
+						links : [],
 						note : null
 					}
 				]
+			}
+		}
+
+		for(let variant of person[kind]?.variants ?? []){
+			if(isPlainObject(variant)){
+				migrateVariantLinks(variant)
 			}
 		}
 	}
@@ -579,34 +882,13 @@ function editDeath() {
 	editDate(`death`)
 }
 
-// The orders are a row of small buttons and the meaning of the chosen one is written underneath, a hint stands in its place while none is chosen so the dialog never changes height, the chosen one is kept in a hidden box so the rest of the dialog can read it like any other box
-function renderOrderChoices() {
-	let chosenSourceOrder = getSourceOrder(Number(document.getElementById(`dateOrder`).value))
-
-	document.getElementById(`dateOrderChoices`).innerHTML = sourceOrders
-		.map((sourceOrder) => `<div class="choice${sourceOrder.order === chosenSourceOrder?.order ? ` selected` : ``}" onclick="chooseDateOrder(${sourceOrder.order})">${sourceOrder.label}</div>`)
-		.join(``)
-
-	document.getElementById(`dateOrderDescription`).textContent = chosenSourceOrder ? `${chosenSourceOrder.name} \u00b7 ${chosenSourceOrder.description}` : `Choose how close this source is to the person.`
-}
-
-// Choosing the order that is already chosen clears it again
-function chooseDateOrder(order) {
-	let orderInput = document.getElementById(`dateOrder`)
-
-	orderInput.value = orderInput.value == `${order}` ? `` : order
-
-	updateDateDialog()
-}
-
 function readDateForm() {
 	return {
 		day : document.getElementById(`dateDay`).value.trim(),
 		month : document.getElementById(`dateMonth`).value.trim(),
 		year : document.getElementById(`dateYear`).value.trim(),
-		order : document.getElementById(`dateOrder`).value,
-		link : document.getElementById(`dateLink`).value.trim(),
-		note : document.getElementById(`dateNote`).value.trim()
+		note : document.getElementById(`dateNote`).value.trim(),
+		links : readDynamicLinks(`dateLinks`)
 	}
 }
 
@@ -623,12 +905,10 @@ function fillDateForm(date) {
 	document.getElementById(`dateDay`).value = date?.day ?? ``
 	document.getElementById(`dateMonth`).value = date?.month ?? ``
 	document.getElementById(`dateYear`).value = date?.year ?? ``
-	document.getElementById(`dateOrder`).value = date?.order ?? ``
-	document.getElementById(`dateLink`).value = date?.link ?? ``
 	document.getElementById(`dateNote`).value = date?.note ?? ``
 
+	renderDynamicLinks(`dateLinks`, date?.links ?? [], () => updateDateDialog())
 	clearDateIssue()
-	renderOrderChoices()
 }
 
 // Writes the boxes into the selected entry and returns what is wrong with the date, or an empty text when it was written, so an impossible date never reaches the list
@@ -644,31 +924,18 @@ function syncDraftFromForm() {
 		year : form.year == `` ? null : Number(form.year),
 		month : form.month == `` ? null : Number(form.month),
 		day : form.day == `` ? null : Number(form.day),
-		order : form.order == `` ? null : Number(form.order),
-		link : form.link == `` ? null : form.link,
+		links : form.links,
 		note : form.note == `` ? null : form.note
 	}
 
 	return ``
 }
 
-// The optional note and link go on a second line of the entry, a link is only clickable when it is a web address, and clicking it must not also select the entry
+// The optional note and links go on a second line of the entry, the note first
 function buildDateEntryHtml(date, index) {
-	let sourceOrder = getSourceOrder(date.order)
 	let isEmpty = isDateEmpty(date)
-	let extraParts = []
 
-	if(date.note){
-		extraParts.push(escapeHtml(date.note))
-	}
-
-	if(date.link){
-		extraParts.push(isWebAddress(date.link)
-			? `<a href="${escapeHtml(date.link)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${escapeHtml(getLinkLabel(date.link))}</a>`
-			: escapeHtml(date.link))
-	}
-
-	return `<div class="entry${index == dateDraft.selectedIndex ? ` selected` : ``}${isEmpty ? ` blank` : ``}" onclick="selectDateEntry(${index})"><span class="star" onclick="starDateEntry(event, ${index})">${index == dateDraft.preferredVariantIndex ? `\u2605` : `\u2606`}</span><span class="text">${isEmpty ? `New date` : formatDateText(date)}</span><span class="meta">${sourceOrder ? `${sourceOrder.name} \u00b7 ${sourceOrder.label}` : `Source not set`}</span><span class="remove" onclick="removeDateEntry(event, ${index})">remove</span>${extraParts.length > 0 ? `<span class="extra">${extraParts.join(` \u00b7 `)}</span>` : ``}</div>`
+	return `<div class="entry${index == dateDraft.selectedIndex ? ` selected` : ``}${isEmpty ? ` blank` : ``}" onclick="selectDateEntry(${index})"><span class="star" onclick="starDateEntry(event, ${index})">${index == dateDraft.preferredVariantIndex ? `\u2605` : `\u2606`}</span><span class="text">${isEmpty ? `New date` : formatDateText(date)}</span><span class="meta"></span><span class="remove" onclick="removeDateEntry(event, ${index})">remove</span>${buildVariantExtraHtml(date)}</div>`
 }
 
 // The list of entered dates is only shown once there is something to list, the star marks the entry the page will show
@@ -696,7 +963,7 @@ function syncDeceasedCheckbox() {
 
 // A copy of one list for the dialog to work on, with one blank entry when nothing was entered yet, and the selection on the starred entry
 function getDateDraft(field) {
-	let variants = (field?.variants ?? []).map((date) => ({ ...date }))
+	let variants = (field?.variants ?? []).map((date) => ({ ...date, links : [...(date.links ?? [])] }))
 	let preferredVariantIndex = field?.preferredVariantIndex ?? 0
 
 	if(variants.length == 0){
@@ -783,7 +1050,6 @@ function closeDate() {
 function updateDateDialog() {
 	clearDateIssue()
 	syncDraftFromForm()
-	renderOrderChoices()
 	renderDateList()
 	syncDeceasedCheckbox()
 }
@@ -918,20 +1184,18 @@ function saveDate(event) {
 	viewPerson()
 }
 
-// A name is a list of entered names because sources disagree, each entry is { firstName, lastName, order, link, note } with null for every part that is not entered, preferredVariantIndex is the starred entry that is used everywhere the person is named, and every person has at least one entry
+// A name is a list of entered names because sources disagree, each entry is { firstName, lastName, links, note } with null for every part that is not entered and links being a list of web addresses, preferredVariantIndex is the starred entry that is used everywhere the person is named, and every person has at least one entry
 let nameDraft = {
 	variants : [],
 	preferredVariantIndex : 0,
 	selectedIndex : 0
 }
-let isCreatingPerson = false
 
 function getBlankName() {
 	return {
 		firstName : null,
 		lastName : null,
-		order : null,
-		link : null,
+		links : [],
 		note : null
 	}
 }
@@ -956,9 +1220,15 @@ function getNameLabel(person) {
 	return formatNameText(getPreferredName(person)) || `Unnamed`
 }
 
-// Names saved before they could have sources were a first and a last name on the person, they become a list of one entry with no source order
+// Names saved before they could have sources were a first and a last name on the person, they become a list of one entry, and names that are saved with a single link get a list of links instead
 function migrateNames(person) {
 	if(person.names){
+		for(let variant of Array.isArray(person.names.variants) ? person.names.variants : []){
+			if(isPlainObject(variant)){
+				migrateVariantLinks(variant)
+			}
+		}
+
 		return
 	}
 
@@ -968,8 +1238,7 @@ function migrateNames(person) {
 			{
 				firstName : person.firstName || null,
 				lastName : person.lastName || null,
-				order : null,
-				link : null,
+				links : [],
 				note : null
 			}
 		]
@@ -981,7 +1250,7 @@ function migrateNames(person) {
 
 // A copy of the list for the dialog to work on, with one blank entry when there is nothing yet, and the selection on the starred entry
 function getNameDraft(field) {
-	let variants = (field?.variants ?? []).map((name) => ({ ...name }))
+	let variants = (field?.variants ?? []).map((name) => ({ ...name, links : [...(name.links ?? [])] }))
 	let preferredVariantIndex = field?.preferredVariantIndex ?? 0
 
 	if(variants.length == 0){
@@ -999,9 +1268,8 @@ function readNameForm() {
 	return {
 		firstName : document.getElementById(`nameFirst`).value.trim(),
 		lastName : document.getElementById(`nameLast`).value.trim(),
-		order : document.getElementById(`nameOrder`).value,
-		link : document.getElementById(`nameLink`).value.trim(),
-		note : document.getElementById(`nameNote`).value.trim()
+		note : document.getElementById(`nameNote`).value.trim(),
+		links : readDynamicLinks(`nameLinks`)
 	}
 }
 
@@ -1013,36 +1281,14 @@ function showNameIssue(issue) {
 	document.getElementById(`nameIssue`).textContent = `\u26a0 ${issue}`
 }
 
-// The orders are a row of small buttons and the meaning of the chosen one is written underneath, the same as in the date dialog, the chosen one is kept in a hidden box
-function renderNameOrderChoices() {
-	let chosenSourceOrder = getSourceOrder(Number(document.getElementById(`nameOrder`).value))
-
-	document.getElementById(`nameOrderChoices`).innerHTML = sourceOrders
-		.map((sourceOrder) => `<div class="choice${sourceOrder.order === chosenSourceOrder?.order ? ` selected` : ``}" onclick="chooseNameOrder(${sourceOrder.order})">${sourceOrder.label}</div>`)
-		.join(``)
-
-	document.getElementById(`nameOrderDescription`).textContent = chosenSourceOrder ? `${chosenSourceOrder.name} \u00b7 ${chosenSourceOrder.description}` : `Choose how close this source is to the person.`
-}
-
-// Choosing the order that is already chosen clears it again
-function chooseNameOrder(order) {
-	let orderInput = document.getElementById(`nameOrder`)
-
-	orderInput.value = orderInput.value == `${order}` ? `` : order
-
-	updateNameDialog()
-}
-
 // The boxes always show the selected entry, an empty entry is allowed while editing and is dropped when the dialog is saved
 function fillNameForm(name) {
 	document.getElementById(`nameFirst`).value = name?.firstName ?? ``
 	document.getElementById(`nameLast`).value = name?.lastName ?? ``
-	document.getElementById(`nameOrder`).value = name?.order ?? ``
-	document.getElementById(`nameLink`).value = name?.link ?? ``
 	document.getElementById(`nameNote`).value = name?.note ?? ``
 
+	renderDynamicLinks(`nameLinks`, name?.links ?? [], () => updateNameDialog())
 	clearNameIssue()
-	renderNameOrderChoices()
 }
 
 // Writes the boxes into the selected entry, a name has no way to be impossible so this always works
@@ -1052,29 +1298,16 @@ function syncNameDraftFromForm() {
 	nameDraft.variants[nameDraft.selectedIndex] = {
 		firstName : form.firstName == `` ? null : form.firstName,
 		lastName : form.lastName == `` ? null : form.lastName,
-		order : form.order == `` ? null : Number(form.order),
-		link : form.link == `` ? null : form.link,
+		links : form.links,
 		note : form.note == `` ? null : form.note
 	}
 }
 
-// The optional note and link go on a second line of the entry, a link is only clickable when it is a web address, and clicking it must not also select the entry
+// The optional note and links go on a second line of the entry, the note first
 function buildNameEntryHtml(name, index) {
-	let sourceOrder = getSourceOrder(name.order)
 	let isEmpty = isNameEmpty(name)
-	let extraParts = []
 
-	if(name.note){
-		extraParts.push(escapeHtml(name.note))
-	}
-
-	if(name.link){
-		extraParts.push(isWebAddress(name.link)
-			? `<a href="${escapeHtml(name.link)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${escapeHtml(getLinkLabel(name.link))}</a>`
-			: escapeHtml(name.link))
-	}
-
-	return `<div class="entry${index == nameDraft.selectedIndex ? ` selected` : ``}${isEmpty ? ` blank` : ``}" onclick="selectNameEntry(${index})"><span class="star" onclick="starNameEntry(event, ${index})">${index == nameDraft.preferredVariantIndex ? `\u2605` : `\u2606`}</span><span class="text">${isEmpty ? `New name` : escapeHtml(formatNameText(name))}</span><span class="meta">${sourceOrder ? `${sourceOrder.name} \u00b7 ${sourceOrder.label}` : `Source not set`}</span><span class="remove" onclick="removeNameEntry(event, ${index})">remove</span>${extraParts.length > 0 ? `<span class="extra">${extraParts.join(` \u00b7 `)}</span>` : ``}</div>`
+	return `<div class="entry${index == nameDraft.selectedIndex ? ` selected` : ``}${isEmpty ? ` blank` : ``}" onclick="selectNameEntry(${index})"><span class="star" onclick="starNameEntry(event, ${index})">${index == nameDraft.preferredVariantIndex ? `\u2605` : `\u2606`}</span><span class="text">${isEmpty ? `New name` : escapeHtml(formatNameText(name))}</span><span class="meta"></span><span class="remove" onclick="removeNameEntry(event, ${index})">remove</span>${buildVariantExtraHtml(name)}</div>`
 }
 
 // The list of entered names is only shown once there is something to list, the star marks the entry the person is named by
@@ -1084,7 +1317,7 @@ function renderNameList() {
 	document.getElementById(`nameList`).innerHTML = isOnlyBlank ? `` : `<div class="heading"><span>Entered names</span><span class="action" onclick="addAnotherName()">+ add another</span></div>${nameDraft.variants.map(buildNameEntryHtml).join(``)}`
 }
 
-// The dialog works on a copy of the list so Cancel throws every change away, the same dialog serves a person who exists and a person who is being added
+// The dialog works on a copy of the list so Cancel throws every change away, it is only for the names of a person who exists, a new person is made in the new person dialog
 function openNameDialog(title, draft) {
 	nameDraft = draft
 
@@ -1103,8 +1336,6 @@ function editName() {
 		return
 	}
 
-	isCreatingPerson = false
-
 	openNameDialog(`Name`, getNameDraft(person.names))
 }
 
@@ -1116,7 +1347,6 @@ function closeName() {
 function updateNameDialog() {
 	clearNameIssue()
 	syncNameDraftFromForm()
-	renderNameOrderChoices()
 	renderNameList()
 }
 
@@ -1178,7 +1408,7 @@ function removeNameEntry(event, index) {
 	renderNameList()
 }
 
-// The empty entries are dropped, the star follows its entry and falls back to the first when its entry was dropped, a person who exists has to keep a name so the dialog stays open and says so, while a person who is being added and has no name entered is simply not created
+// The empty entries are dropped, the star follows its entry and falls back to the first when its entry was dropped, a person has to keep a name so the dialog stays open and says so
 function saveName(event) {
 	event.preventDefault()
 	syncNameDraftFromForm()
@@ -1188,11 +1418,7 @@ function saveName(event) {
 		.filter((index) => !isNameEmpty(nameDraft.variants[index]))
 
 	if(keptIndexes.length == 0){
-		if(isCreatingPerson){
-			closeName()
-		} else {
-			showNameIssue(`A person needs a name`)
-		}
+		showNameIssue(`A person needs a name`)
 
 		return
 	}
@@ -1200,21 +1426,6 @@ function saveName(event) {
 	let names = {
 		preferredVariantIndex : Math.max(keptIndexes.indexOf(nameDraft.preferredVariantIndex), 0),
 		variants : keptIndexes.map((index) => nameDraft.variants[index])
-	}
-
-	if(isCreatingPerson){
-		let ids = Object.keys(persons).map(Number)
-		let newId = ids.length > 0 ? Math.max(...ids) + 1 : 1
-
-		persons[ newId ] = {
-			names : names
-		}
-
-		closeName()
-		viewPerson(newId)
-		console.log(persons, activeHistory)
-
-		return
 	}
 
 	let person = persons[activeHistory.at(-1)]
@@ -1227,7 +1438,7 @@ function saveName(event) {
 	viewPerson()
 }
 
-// A gender is a list of entered values because sources disagree, each entry is { value, order, link, note } with null for every part that is not entered, value is one of the genderOptions, preferredVariantIndex is the starred entry that the person's page shows, and a person with no entered gender has no such property at all
+// A gender is a list of entered values because sources disagree, each entry is { value, links, note } with null for every part that is not entered and links being a list of web addresses, value is one of the genderOptions, preferredVariantIndex is the starred entry that the person's page shows, and a person with no entered gender has no such property at all
 let genderOptions = [
 	{
 		value : `male`,
@@ -1251,8 +1462,7 @@ let genderDraft = {
 function getBlankGender() {
 	return {
 		value : null,
-		order : null,
-		link : null,
+		links : [],
 		note : null
 	}
 }
@@ -1302,44 +1512,21 @@ function chooseGenderValue(index) {
 	updateGenderDialog()
 }
 
-// The orders are a row of small buttons and the meaning of the chosen one is written underneath, the same as in the name dialog, the chosen one is kept in a hidden box
-function renderGenderOrderChoices() {
-	let chosenSourceOrder = getSourceOrder(Number(document.getElementById(`genderOrder`).value))
-
-	document.getElementById(`genderOrderChoices`).innerHTML = sourceOrders
-		.map((sourceOrder) => `<div class="choice${sourceOrder.order === chosenSourceOrder?.order ? ` selected` : ``}" onclick="chooseGenderOrder(${sourceOrder.order})">${sourceOrder.label}</div>`)
-		.join(``)
-
-	document.getElementById(`genderOrderDescription`).textContent = chosenSourceOrder ? `${chosenSourceOrder.name} \u00b7 ${chosenSourceOrder.description}` : `Choose how close this source is to the person.`
-}
-
-// Choosing the order that is already chosen clears it again
-function chooseGenderOrder(order) {
-	let orderInput = document.getElementById(`genderOrder`)
-
-	orderInput.value = orderInput.value == `${order}` ? `` : order
-
-	updateGenderDialog()
-}
-
 function readGenderForm() {
 	return {
 		value : document.getElementById(`genderValue`).value,
-		order : document.getElementById(`genderOrder`).value,
-		link : document.getElementById(`genderLink`).value.trim(),
-		note : document.getElementById(`genderNote`).value.trim()
+		note : document.getElementById(`genderNote`).value.trim(),
+		links : readDynamicLinks(`genderLinks`)
 	}
 }
 
 // The boxes always show the selected entry, an empty entry is allowed while editing and is dropped when the dialog is saved
 function fillGenderForm(gender) {
 	document.getElementById(`genderValue`).value = gender?.value ?? ``
-	document.getElementById(`genderOrder`).value = gender?.order ?? ``
-	document.getElementById(`genderLink`).value = gender?.link ?? ``
 	document.getElementById(`genderNote`).value = gender?.note ?? ``
 
+	renderDynamicLinks(`genderLinks`, gender?.links ?? [], () => updateGenderDialog())
 	renderGenderValueChoices()
-	renderGenderOrderChoices()
 }
 
 // Writes the boxes into the selected entry, a gender has no way to be impossible so this always works
@@ -1348,29 +1535,16 @@ function syncGenderDraftFromForm() {
 
 	genderDraft.variants[genderDraft.selectedIndex] = {
 		value : form.value == `` ? null : form.value,
-		order : form.order == `` ? null : Number(form.order),
-		link : form.link == `` ? null : form.link,
+		links : form.links,
 		note : form.note == `` ? null : form.note
 	}
 }
 
-// The optional note and link go on a second line of the entry, a link is only clickable when it is a web address, and clicking it must not also select the entry
+// The optional note and links go on a second line of the entry, the note first
 function buildGenderEntryHtml(gender, index) {
-	let sourceOrder = getSourceOrder(gender.order)
 	let isEmpty = isGenderEmpty(gender)
-	let extraParts = []
 
-	if(gender.note){
-		extraParts.push(escapeHtml(gender.note))
-	}
-
-	if(gender.link){
-		extraParts.push(isWebAddress(gender.link)
-			? `<a href="${escapeHtml(gender.link)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${escapeHtml(getLinkLabel(gender.link))}</a>`
-			: escapeHtml(gender.link))
-	}
-
-	return `<div class="entry${index == genderDraft.selectedIndex ? ` selected` : ``}${isEmpty ? ` blank` : ``}" onclick="selectGenderEntry(${index})"><span class="star" onclick="starGenderEntry(event, ${index})">${index == genderDraft.preferredVariantIndex ? `\u2605` : `\u2606`}</span><span class="text">${isEmpty ? `New gender` : escapeHtml(getGenderLabel(gender.value))}</span><span class="meta">${sourceOrder ? `${sourceOrder.name} \u00b7 ${sourceOrder.label}` : `Source not set`}</span><span class="remove" onclick="removeGenderEntry(event, ${index})">remove</span>${extraParts.length > 0 ? `<span class="extra">${extraParts.join(` \u00b7 `)}</span>` : ``}</div>`
+	return `<div class="entry${index == genderDraft.selectedIndex ? ` selected` : ``}${isEmpty ? ` blank` : ``}" onclick="selectGenderEntry(${index})"><span class="star" onclick="starGenderEntry(event, ${index})">${index == genderDraft.preferredVariantIndex ? `\u2605` : `\u2606`}</span><span class="text">${isEmpty ? `New gender` : escapeHtml(getGenderLabel(gender.value))}</span><span class="meta"></span><span class="remove" onclick="removeGenderEntry(event, ${index})">remove</span>${buildVariantExtraHtml(gender)}</div>`
 }
 
 // The list of entered genders is only shown once there is something to list, the star marks the entry the page will show
@@ -1382,7 +1556,7 @@ function renderGenderList() {
 
 // A copy of the list for the dialog to work on, with one blank entry when there is nothing yet, and the selection on the starred entry
 function getGenderDraft(field) {
-	let variants = (field?.variants ?? []).map((gender) => ({ ...gender }))
+	let variants = (field?.variants ?? []).map((gender) => ({ ...gender, links : [...(gender.links ?? [])] }))
 	let preferredVariantIndex = field?.preferredVariantIndex ?? 0
 
 	if(variants.length == 0){
@@ -1420,7 +1594,6 @@ function closeGender() {
 function updateGenderDialog() {
 	syncGenderDraftFromForm()
 	renderGenderValueChoices()
-	renderGenderOrderChoices()
 	renderGenderList()
 }
 
@@ -1510,7 +1683,7 @@ function saveGender(event) {
 	viewPerson()
 }
 
-// A gender in a file that was edited by hand, or written by an older version, is made safe, a gender that is not a list of sources is dropped, a source whose value is not one of the options is dropped, the order, the link and the note of the others are kept when they are valid, a gender with no valid source left is dropped, and the star stays on its own source, or goes to the first when that source was dropped or the star was out of bounds
+// A gender in a file that was edited by hand, or written by an older version, is made safe, a gender that is not a list of sources is dropped, a source whose value is not one of the options is dropped, the links and the note of the others are kept when they are valid and a single link of an older version becomes a list of one, a gender with no valid source left is dropped, and the star stays on its own source, or goes to the first when that source was dropped or the star was out of bounds
 function sanitizeGender(person) {
 	if(!isPlainObject(person.gender) || !Array.isArray(person.gender.variants)){
 		delete person.gender
@@ -1533,8 +1706,7 @@ function sanitizeGender(person) {
 
 		cleanedVariants.push({
 			value : variant.value,
-			order : Number.isInteger(variant.order) && getSourceOrder(variant.order) ? variant.order : null,
-			link : typeof variant.link == `string` && variant.link != `` ? variant.link : null,
+			links : sanitizeLinks(variant),
 			note : typeof variant.note == `string` && variant.note != `` ? variant.note : null
 		})
 	}
@@ -1908,7 +2080,7 @@ function applyImport(data) {
 	scheduleExportSizeUpdate()
 }
 
-// Dates and names saved in their old forms are turned into lists, the profile picture ids and crops of the time when the page had pictures are dropped, and so are the pictures themselves, which were kept in localStorage and in an IndexedDB database, relations are made safe and the list of plain text relatives is built, and the person on screen before the refresh is shown again, nothing is shown when the history is empty, this is a function because relations.js is read after this file and calls it when it is ready, the first drawing of a person needs the relations
+// Dates and names saved in their old forms are turned into lists, a single link of an older version becomes a list of links and the source orders that are not used any more are dropped, the profile picture ids and crops of the time when the page had pictures are dropped, and so are the pictures themselves, which were kept in localStorage and in an IndexedDB database, relations are made safe and the list of plain text relatives is built, and the person on screen before the refresh is shown again, nothing is shown when the history is empty, this is a function because relations.js is read after this file and calls it when it is ready, the first drawing of a person needs the relations
 function startApp() {
 	Object.values(persons).forEach(migrateDates)
 	Object.values(persons).forEach(migrateNames)

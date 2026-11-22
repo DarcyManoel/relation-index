@@ -1,4 +1,4 @@
-// The relations of a person are kept on the person as relations = { parents, siblings, children }, each is a list of entries, an entry is { personId, variants, preferredVariantIndex } for someone who has a page, or { text, variants, preferredVariantIndex } for someone only written down as plain text, the variants are the sources that disagree or agree, each is { subtype, order, link, note, isAutoInferred, inferenceId, derivedFrom, isQuestioned }, a variant is either typed in by the user or worked out by the page from the parents that were entered, which is isAutoInferred, and a person with no relations at all has no such property
+// The relations of a person are kept on the person as relations = { parents, siblings, children, blockedInferences }, each of the three is a list of entries, an entry is { personId, variants, preferredVariantIndex } for someone who has a page, or { text, variants, preferredVariantIndex } for someone only written down as plain text, the variants are the sources that disagree or agree, each is { subtype, links, note, isAutoInferred, inferenceId, derivedFrom, isQuestioned }, a variant is either typed in by the user or worked out by the page from the parents that were entered, which is isAutoInferred, a typed variant that the page worked out the same kind of link for carries that as hasInference, inferenceId, derivedFrom and inferenceNote instead of getting a second variant next to it, blockedInferences is optional and is a list of role:targetId texts for links that the user removed after the page worked them out, the page does not work those out again until that person is added by hand under that role, and a person with no relations at all has no such property
 let relationRoles = [`parents`, `siblings`, `children`]
 let relationRoleLabels = {
 	parents : `Parents`,
@@ -28,7 +28,7 @@ let relationSubtypeLabels = {
 // Plain text relatives found by their normalised name, so one click can offer to link every written down copy of the same name to a new page, it is rebuilt whenever the people are loaded or the relations change
 let plainTextRelationIndex = {}
 
-// The dialog works on copies of all three lists, so Cancel throws every change away, entries is the copy of every role, and the selection is the entry and the source of the side on show
+// The dialog works on copies of all three lists, so Cancel throws every change away, entries is the copy of every role, and the selection is the entry and the source of the side on show, addedKeys are the role:personId texts of the people who were added by hand in the dialog, so saving can let the page work those out again
 let relationsDraft = {
 	personId : null,
 	role : `parents`,
@@ -38,14 +38,14 @@ let relationsDraft = {
 		children : []
 	},
 	selectedEntryIndex : 0,
-	selectedVariantIndex : 0
+	selectedVariantIndex : 0,
+	addedKeys : new Set()
 }
 
 function getBlankRelationVariant() {
 	return {
 		subtype : `unknown`,
-		order : null,
-		link : null,
+		links : [],
 		note : null,
 		isAutoInferred : false,
 		inferenceId : null,
@@ -73,9 +73,17 @@ function ensureRelations(person) {
 	return person.relations
 }
 
-// A person whose lists are all empty has no relations property, the same as a person who never had any
+// A person whose lists are all empty has no relations property, the same as a person who never had any, unless links are still kept from being worked out, an empty list of those is dropped
 function cleanupRelations(person) {
-	if(person.relations && relationRoles.every((role) => (person.relations[role] ?? []).length == 0)){
+	if(!person.relations){
+		return
+	}
+
+	if(Array.isArray(person.relations.blockedInferences) && person.relations.blockedInferences.length == 0){
+		delete person.relations.blockedInferences
+	}
+
+	if(!person.relations.blockedInferences && relationRoles.every((role) => (person.relations[role] ?? []).length == 0)){
 		delete person.relations
 	}
 }
@@ -86,6 +94,44 @@ function getReciprocalRole(role) {
 	}
 
 	return role == `children` ? `parents` : `siblings`
+}
+
+// A link the user took away after the page worked it out is written as role:targetId, which is the role on the list of the person and the person who was on it
+function buildBlockedInferenceKey(role, targetId) {
+	return `${role}:${targetId}`
+}
+
+function isInferenceBlocked(person, role, targetId) {
+	return (person.relations?.blockedInferences ?? []).includes(buildBlockedInferenceKey(role, targetId))
+}
+
+// From now on the page does not work out this link for this person, the key is only written once
+function blockInference(person, role, targetId) {
+	let relations = ensureRelations(person)
+	let key = buildBlockedInferenceKey(role, targetId)
+
+	if(!Array.isArray(relations.blockedInferences)){
+		relations.blockedInferences = []
+	}
+
+	if(!relations.blockedInferences.includes(key)){
+		relations.blockedInferences.push(key)
+	}
+}
+
+// A link that is added by hand again is worked out normally again, so its key is taken out, and the list goes when nothing is left in it
+function unblockInference(person, role, targetId) {
+	let blockedInferences = person.relations?.blockedInferences
+
+	if(!Array.isArray(blockedInferences)){
+		return
+	}
+
+	person.relations.blockedInferences = blockedInferences.filter((key) => key != buildBlockedInferenceKey(role, targetId))
+
+	if(person.relations.blockedInferences.length == 0){
+		delete person.relations.blockedInferences
+	}
 }
 
 function findRelationEntry(person, role, personId) {
@@ -106,6 +152,64 @@ function getManualVariants(entry) {
 	return entry.variants.filter((variant) => !variant.isAutoInferred)
 }
 
+// The sources that the page worked out and that still hold, on their own or carried by a typed source, one that was flagged as questioned is not counted because it was going to go anyway
+function getUnquestionedInferences(entry) {
+	return entry.variants.filter((variant) => (variant.isAutoInferred || variant.hasInference === true) && !variant.isQuestioned)
+}
+
+// What the page worked out belongs to the list it was worked out for, so a copy of a typed source for someone else, or for a name written as plain text, is made without it
+function copyVariantWithoutInference(variant) {
+	let copy = { ...variant, links : [...(variant.links ?? [])] }
+
+	delete copy.hasInference
+	delete copy.inferenceNote
+
+	copy.inferenceId = null
+	copy.derivedFrom = null
+	copy.isQuestioned = false
+
+	return copy
+}
+
+// A typed source and a source that the page worked out on its own for the same kind of link are one source, so the standalone inferred one is taken off the entry and, when it still held, what it worked out goes onto the typed source, the star moves to the typed source when it was on the one that went, this is for an entry whose typed sources may have just been added or changed to a kind of link that the page had already worked out
+function absorbDuplicateInferences(entry) {
+	let preferredVariant = entry.variants[entry.preferredVariantIndex]
+	let keptVariants = []
+
+	for(let variant of entry.variants){
+		let carrier = variant.isAutoInferred ? entry.variants.find((otherVariant) => !otherVariant.isAutoInferred && otherVariant.subtype === variant.subtype) : null
+
+		if(!carrier){
+			keptVariants.push(variant)
+
+			continue
+		}
+
+		if(!variant.isQuestioned && carrier.hasInference !== true){
+			carrier.hasInference = true
+			carrier.inferenceId = variant.inferenceId
+			carrier.derivedFrom = variant.derivedFrom
+			carrier.inferenceNote = variant.note
+			carrier.isQuestioned = false
+		}
+	}
+
+	if(keptVariants.length == entry.variants.length){
+		return
+	}
+
+	entry.variants = keptVariants
+	entry.preferredVariantIndex = Math.max(keptVariants.includes(preferredVariant) ? keptVariants.indexOf(preferredVariant) : keptVariants.findIndex((variant) => !variant.isAutoInferred && variant.subtype === preferredVariant?.subtype), 0)
+}
+
+// The second line of a source in the relations dialog, the note first, then what the page worked out when a typed source carries it, then the links
+function buildRelationVariantExtraHtml(variant) {
+	return buildVariantExtraHtml({
+		...variant,
+		note : [variant.note, variant.hasInference === true ? variant.inferenceNote : null].filter((part) => part).join(` \u00b7 `) || null
+	})
+}
+
 function getRelationEntryLabel(entry) {
 	if(entry.isNew){
 		return getPendingPersonName(entry)
@@ -114,7 +218,7 @@ function getRelationEntryLabel(entry) {
 	return entry.personId == null ? entry.text : getNameLabel(persons[entry.personId])
 }
 
-// Only the sources typed in by the user are mirrored, the parents of a person are their parents and that person is a child of theirs, a sibling is a sibling both ways, the sources inferred by the page are worked out on each side on their own and are never copied, the star follows the same source when it is a typed one and otherwise stays where it was on the other side
+// Only the sources typed in by the user are mirrored, the parents of a person are their parents and that person is a child of theirs, a sibling is a sibling both ways, the sources inferred by the page are worked out on each side on their own and are never copied, the star follows the same source when it is a typed one and otherwise stays where it was on the other side, a person who gets an entry on the other side for the first time is added by hand there, so the page may work that link out again
 function syncReciprocalRelation(ownerId, role, targetId) {
 	let owner = persons[ownerId]
 	let target = persons[targetId]
@@ -143,6 +247,8 @@ function syncReciprocalRelation(ownerId, role, targetId) {
 	let targetEntry = findRelationEntry(target, reciprocalRole, ownerId)
 
 	if(!targetEntry){
+		unblockInference(target, reciprocalRole, ownerId)
+
 		targetEntry = {
 			personId : ownerId,
 			variants : [],
@@ -153,7 +259,7 @@ function syncReciprocalRelation(ownerId, role, targetId) {
 	}
 
 	let copies = manualVariants.map((variant) => {
-		let copy = { ...variant }
+		let copy = copyVariantWithoutInference(variant)
 
 		delete copy.hasConflict
 
@@ -195,19 +301,19 @@ function removeReciprocalRelation(ownerId, role, targetId) {
 	cleanupRelations(target)
 }
 
-// What a person written into a file by hand or by an older version may hold is made safe, entries of people that no longer exist are dropped, a person is only linked once under one role, every source gets all its parts, and a subtype that the role does not have becomes unknown
+// What a person written into a file by hand or by an older version may hold is made safe, entries of people that no longer exist are dropped, a person is only linked once under one role, every source gets all its parts, a single link of an older version becomes a list of links, and a subtype that the role does not have becomes unknown
 function sanitizeRelationVariant(role, variant) {
 	let blankVariant = getBlankRelationVariant()
 
 	return {
 		subtype : relationSubtypes[role].includes(variant.subtype) ? variant.subtype : `unknown`,
-		order : Number.isInteger(variant.order) && getSourceOrder(variant.order) ? variant.order : null,
-		link : typeof variant.link == `string` && variant.link != `` ? variant.link : null,
+		links : sanitizeLinks(variant),
 		note : typeof variant.note == `string` && variant.note != `` ? variant.note : null,
 		isAutoInferred : variant.isAutoInferred === true,
 		inferenceId : typeof variant.inferenceId == `string` ? variant.inferenceId : blankVariant.inferenceId,
 		derivedFrom : Array.isArray(variant.derivedFrom) ? variant.derivedFrom.filter((key) => typeof key == `string`) : blankVariant.derivedFrom,
 		isQuestioned : variant.isQuestioned === true,
+		...(variant.isAutoInferred !== true && variant.hasInference === true ? { hasInference : true, inferenceNote : typeof variant.inferenceNote == `string` ? variant.inferenceNote : null } : {}),
 		...(variant.hasConflict === true ? { hasConflict : true } : {})
 	}
 }
@@ -268,6 +374,21 @@ function sanitizeRelations(person) {
 				preferredVariantIndex : preferredVariantIndex
 			})
 		}
+	}
+
+	// The links kept from being worked out are only role:personId texts of people who still exist and who are not the person themselves, each once
+	let blockedInferences = [...new Set(Array.isArray(person.relations.blockedInferences) ? person.relations.blockedInferences : [])].filter((key) => {
+		if(typeof key != `string` || !/^(parents|siblings|children):\d+$/.test(key)){
+			return false
+		}
+
+		let blockedPerson = persons[Number(key.split(`:`)[1])]
+
+		return Boolean(blockedPerson) && blockedPerson !== person
+	})
+
+	if(blockedInferences.length > 0){
+		cleanedRelations.blockedInferences = blockedInferences
 	}
 
 	person.relations = cleanedRelations
@@ -556,13 +677,24 @@ function getDefinitiveWantedLinks(wantedBySubtype) {
 	return wantedLinks
 }
 
-// Brings the inferred sources on one list of a person in line with what the page wants, a source that is still wanted is kept and updated, a source that is not wanted any more is removed when it is not the starred one and flagged as questioned when it is, so the user decides what happens to a source they chose, a source that is wanted and missing is added, an entry for a person who is already linked under another role is not made, a typed source that disagrees with every kind of link wanted for that person is flagged as a conflict, and the answer is whether anything changed
+// Brings the inferred sources on one list of a person in line with what the page wants, a source that is still wanted is kept and updated, a source that is not wanted any more is removed when it is not the starred one and flagged as questioned when it is, so the user decides what happens to a source they chose, a source that is wanted and missing is added, an entry for a person who is already linked under another role is not made, a typed source that disagrees with every kind of link wanted for that person is flagged as a conflict, a typed source with the same kind of link as one that is wanted carries what was worked out instead of getting a second source next to it, any standalone inferred source of that kind is dropped, and the typed source loses what it carried when it no longer holds, a person whose link the user removed is not wanted at all, so the inferred sources they still have are taken away and none are added, and the answer is whether anything changed
 function reconcileRoleList(person, role, wantedLinks) {
 	let hasChanged = false
+
+	wantedLinks = new Map([...wantedLinks].filter(([targetId]) => !isInferenceBlocked(person, role, targetId)))
 
 	for(let entry of [...(person.relations?.[role] ?? [])]){
 		if(entry.personId == null){
 			continue
+		}
+
+		let isBlocked = isInferenceBlocked(person, role, entry.personId)
+		let manualCarriers = new Map()
+
+		for(let variant of entry.variants){
+			if(!variant.isAutoInferred && !manualCarriers.has(variant.subtype)){
+				manualCarriers.set(variant.subtype, variant)
+			}
 		}
 
 		let wantedBySubtype = getDefinitiveWantedLinks(wantedLinks.get(entry.personId))
@@ -586,7 +718,43 @@ function reconcileRoleList(person, role, wantedLinks) {
 					}
 				}
 
+				let wantedForVariant = wantedBySubtype.get(variant.subtype)
+
+				if(wantedForVariant && manualCarriers.get(variant.subtype) === variant){
+					if(variant.hasInference !== true || variant.isQuestioned || variant.inferenceId != wantedForVariant.inferenceId || variant.inferenceNote != wantedForVariant.note || JSON.stringify(variant.derivedFrom) != JSON.stringify(wantedForVariant.derivedFrom)){
+						hasChanged = true
+
+						variant.hasInference = true
+						variant.inferenceId = wantedForVariant.inferenceId
+						variant.derivedFrom = wantedForVariant.derivedFrom
+						variant.inferenceNote = wantedForVariant.note
+						variant.isQuestioned = false
+					}
+
+					matchedSubtypes.add(variant.subtype)
+				} else if(variant.hasInference === true || variant.inferenceNote != null || variant.inferenceId != null || variant.derivedFrom != null || variant.isQuestioned === true){
+					hasChanged = true
+
+					delete variant.hasInference
+					delete variant.inferenceId
+					delete variant.derivedFrom
+					delete variant.inferenceNote
+					delete variant.isQuestioned
+				}
+
 				keptVariants.push(variant)
+
+				continue
+			}
+
+			if(isBlocked){
+				hasChanged = true
+
+				continue
+			}
+
+			if(manualCarriers.has(variant.subtype) && wantedBySubtype.has(variant.subtype)){
+				hasChanged = true
 
 				continue
 			}
@@ -600,13 +768,12 @@ function reconcileRoleList(person, role, wantedLinks) {
 			let wanted = wantedBySubtype.get(variant.subtype)
 
 			if(wanted && !matchedSubtypes.has(variant.subtype)){
-				if(variant.isQuestioned || variant.inferenceId != wanted.inferenceId || variant.note != wanted.note || variant.order != 5 || JSON.stringify(variant.derivedFrom) != JSON.stringify(wanted.derivedFrom)){
+				if(variant.isQuestioned || variant.inferenceId != wanted.inferenceId || variant.note != wanted.note || JSON.stringify(variant.derivedFrom) != JSON.stringify(wanted.derivedFrom)){
 					hasChanged = true
 
 					variant.isQuestioned = false
 					variant.inferenceId = wanted.inferenceId
 					variant.note = wanted.note
-					variant.order = 5
 					variant.derivedFrom = wanted.derivedFrom
 				}
 
@@ -638,8 +805,7 @@ function reconcileRoleList(person, role, wantedLinks) {
 
 			keptVariants.push({
 				subtype : subtype,
-				order : 5,
-				link : null,
+				links : [],
 				note : wanted.note,
 				isAutoInferred : true,
 				inferenceId : wanted.inferenceId,
@@ -651,6 +817,8 @@ function reconcileRoleList(person, role, wantedLinks) {
 		entry.variants = keptVariants
 		if(keptVariants.includes(preferredVariant)){
 			entry.preferredVariantIndex = keptVariants.indexOf(preferredVariant)
+		} else if(preferredVariant?.isAutoInferred && manualCarriers.has(preferredVariant.subtype) && keptVariants.includes(manualCarriers.get(preferredVariant.subtype))){
+			entry.preferredVariantIndex = keptVariants.indexOf(manualCarriers.get(preferredVariant.subtype))
 		} else {
 			entry.preferredVariantIndex = Math.max(keptVariants.findIndex((variant) => variant.isAutoInferred && variant.subtype != `unknown`), 0)
 		}
@@ -673,8 +841,7 @@ function reconcileRoleList(person, role, wantedLinks) {
 			personId : targetId,
 			variants : [...wantedBySubtype.values()].map((wanted) => ({
 				subtype : wanted.subtype,
-				order : 5,
-				link : null,
+				links : [],
 				note : wanted.note,
 				isAutoInferred : true,
 				inferenceId : wanted.inferenceId,
@@ -1132,8 +1299,7 @@ function promoteTextRelation(ownerId, role, text) {
 				{
 					firstName : spaceIndex == -1 ? trimmedText : trimmedText.slice(0, spaceIndex).trim(),
 					lastName : spaceIndex == -1 ? null : trimmedText.slice(spaceIndex + 1).trim() || null,
-					order : null,
-					link : null,
+					links : [],
 					note : null
 				}
 			]
@@ -1173,7 +1339,7 @@ function promoteTextRelation(ownerId, role, text) {
 	viewPerson()
 }
 
-// When a person is deleted the people who had them as a relative keep the name as plain text with the sources that were typed in, an entry that only had inferred sources is dropped, the deleted person's own relations are cleared so they cannot bring anything back, and what can be worked out again is worked out for the people who are left
+// When a person is deleted the people who had them as a relative keep the name as plain text with the sources that were typed in, an entry that only had inferred sources is dropped, links that were kept from being worked out for the deleted person are forgotten, the deleted person's own relations are cleared so they cannot bring anything back, and what can be worked out again is worked out for the people who are left
 function unlinkPersonFromRelations(personId) {
 	let deletedPerson = persons[personId]
 
@@ -1211,10 +1377,14 @@ function unlinkPersonFromRelations(personId) {
 
 				list[index] = {
 					text : nameText,
-					variants : manualVariants,
+					variants : manualVariants.map(copyVariantWithoutInference),
 					preferredVariantIndex : Math.max(manualVariants.indexOf(entry.variants[entry.preferredVariantIndex]), 0)
 				}
 			}
+		}
+
+		if(Array.isArray(person.relations.blockedInferences)){
+			person.relations.blockedInferences = person.relations.blockedInferences.filter((key) => !key.endsWith(`:${personId}`))
 		}
 
 		cleanupRelations(person)
@@ -1280,6 +1450,7 @@ function openRelationsDialog(initialRole = `parents`) {
 	relationsDraft.personId = activeHistory.at(-1)
 	relationsDraft.role = initialRole
 	relationsDraft.entries = {}
+	relationsDraft.addedKeys = new Set()
 
 	for(let role of relationRoles){
 		relationsDraft.entries[role] = JSON.parse(JSON.stringify(person.relations?.[role] ?? [])).filter(isRenderableRelationEntry)
@@ -1309,7 +1480,7 @@ function closeRelations() {
 	document.getElementById(`relationsDialog`).close()
 }
 
-// Writes the link and the note boxes into the selected source, a source worked out by the page is not edited
+// Writes the note and the links boxes into the selected source, a source worked out by the page is not edited
 function syncRelationsFromForm() {
 	let variant = getSelectedRelationsVariant()
 
@@ -1317,18 +1488,16 @@ function syncRelationsFromForm() {
 		return
 	}
 
-	let link = document.getElementById(`relationsLink`).value.trim()
 	let note = document.getElementById(`relationsNote`).value.trim()
 
-	variant.link = link == `` ? null : link
 	variant.note = note == `` ? null : note
+	variant.links = readDynamicLinks(`relationsLinks`)
 }
 
-// The boxes always show the selected source, they are only filled when the selection changes so typing is never interrupted
+// The boxes always show the selected source, they are only filled when the selection changes so typing is never interrupted, the links are drawn with the rest of the editor
 function fillRelationsForm() {
 	let variant = getSelectedRelationsVariant()
 
-	document.getElementById(`relationsLink`).value = variant?.link ?? ``
 	document.getElementById(`relationsNote`).value = variant?.note ?? ``
 	document.getElementById(`relationsCoParentSearch`).value = ``
 }
@@ -1356,14 +1525,13 @@ function updateRelationsDialog(event) {
 	renderRelationsEditor()
 }
 
-// What the add dialog is asking for, the person or the words that are being added, the other parent when a child is being added, and the kind of link and the source order of the new entry, the dialog is a second dialog on top of the relations dialog and adds one entry to its copy of the lists
+// What the add dialog is asking for, the person or the words that are being added, the other parent when a child is being added, and the kind of link of the new entry, the dialog is a second dialog on top of the relations dialog and adds one entry to its copy of the lists
 let addRelationDraft = {
 	role : `parents`,
 	target : null,
 	coParent : null,
 	previousCoParents : [],
-	subtype : `unknown`,
-	order : null
+	subtype : `unknown`
 }
 
 // Everyone who is already the other parent of a child of the person on screen, from the copy of the children in the relations dialog, and from the other parents listed on those children, a person with a page is counted once, and a name written as plain text is counted once for each spelling
@@ -1426,8 +1594,7 @@ function openAddRelationDialog() {
 		target : null,
 		coParent : null,
 		previousCoParents : role == `children` ? collectPreviousCoParents() : [],
-		subtype : `unknown`,
-		order : null
+		subtype : `unknown`
 	}
 
 	document.getElementById(`addRelationTitle`).textContent = `Add ${relationRoleSingularLabels[role]}`
@@ -1538,70 +1705,27 @@ function getNewPersonFieldPrefix(which) {
 	return which == `target` ? `addTargetNew` : `addCoParentNew`
 }
 
-// A person needs a name, and a date that is typed has to be a real one, the same as in the date dialog
-function getNewPersonIssue(pendingPerson) {
-	if(!pendingPerson.firstName && !pendingPerson.lastName){
-		return `Enter a name`
-	}
-
-	for(let [label, date] of [[`Birth`, pendingPerson.birth], [`Death`, pendingPerson.death]]){
-		let issue = date ? getDateIssue(date.day, date.month, date.year) : ``
-
-		if(issue != ``){
-			return `${label}: ${issue}`
-		}
-	}
-
-	return ``
-}
-
-// Fills the boxes from the pending person, which is only done when the panel opens, so typing is never interrupted
+// Builds the boxes of the panel from the pending person with the same helper that the new person dialog uses, which is only done when the panel opens, so typing is never interrupted
 function fillNewPersonForm(which) {
 	let pendingPerson = addRelationDraft[which]
-	let prefix = getNewPersonFieldPrefix(which)
 
-	document.getElementById(`${prefix}First`).value = pendingPerson.firstName ?? ``
-	document.getElementById(`${prefix}Last`).value = pendingPerson.lastName ?? ``
-
-	for(let [kind, suffix] of [[`birth`, `Birth`], [`death`, `Death`]]){
-		document.getElementById(`${prefix}${suffix}Day`).value = pendingPerson[kind]?.day ?? ``
-		document.getElementById(`${prefix}${suffix}Month`).value = pendingPerson[kind]?.month ?? ``
-		document.getElementById(`${prefix}${suffix}Year`).value = pendingPerson[kind]?.year ?? ``
-	}
-
-	document.getElementById(`${prefix}Deceased`).checked = pendingPerson.isDeceased
+	document.getElementById(which == `target` ? `addRelationNewPersonFields` : `addCoParentNewPersonFields`).innerHTML = buildPersonCreateHtml(getNewPersonFieldPrefix(which), pendingPerson)
 
 	renderNewPersonFields(which)
 }
 
-// Writes the boxes into the pending person and answers what is wrong with it, a date with nothing typed is no date, and a death date makes the deceased box meaningless, so it is cleared
+// Writes the boxes into the pending person and answers what is wrong with it, read and judged by the same helpers as the new person dialog
 function syncNewPersonFromForm(which) {
 	let pendingPerson = addRelationDraft[which]
-	let prefix = getNewPersonFieldPrefix(which)
-	let readBox = (suffix) => document.getElementById(`${prefix}${suffix}`).value.trim()
-	let readDate = (suffix) => {
-		let date = {
-			day : readBox(`${suffix}Day`),
-			month : readBox(`${suffix}Month`),
-			year : readBox(`${suffix}Year`)
-		}
 
-		return Object.values(date).every((part) => part == ``) ? null : date
-	}
+	Object.assign(pendingPerson, readPersonCreateState(getNewPersonFieldPrefix(which)))
 
-	pendingPerson.firstName = readBox(`First`) || null
-	pendingPerson.lastName = readBox(`Last`) || null
-	pendingPerson.birth = readDate(`Birth`)
-	pendingPerson.death = readDate(`Death`)
-	pendingPerson.isDeceased = !pendingPerson.death && document.getElementById(`${prefix}Deceased`).checked
-
-	return getNewPersonIssue(pendingPerson)
+	return getPersonCreateIssue(pendingPerson)
 }
 
-// Shows the panel when the person is a pending new one and hides it otherwise, the gender buttons show the chosen one, the deceased box is disabled while any part of a death date is typed, the same as in the date dialog, and what is wrong is written underneath
+// Shows the panel when the person is a pending new one and hides it otherwise, the deceased box and the red name boxes are kept up to date by the shared helper, the gender buttons and the text of what is wrong belong to the shared helpers as well
 function renderNewPersonFields(which) {
 	let pendingPerson = addRelationDraft[which]
-	let prefix = getNewPersonFieldPrefix(which)
 	let containerElement = document.getElementById(which == `target` ? `addRelationNewPersonFields` : `addCoParentNewPersonFields`)
 
 	containerElement.hidden = !pendingPerson?.isNew
@@ -1610,31 +1734,7 @@ function renderNewPersonFields(which) {
 		return
 	}
 
-	let hasDeathPart = [`Day`, `Month`, `Year`].some((suffix) => document.getElementById(`${prefix}Death${suffix}`).value.trim() != ``)
-	let deceasedElement = document.getElementById(`${prefix}Deceased`)
-
-	deceasedElement.disabled = hasDeathPart
-
-	if(hasDeathPart){
-		deceasedElement.checked = false
-	}
-
-	document.getElementById(`${prefix}GenderChoices`).innerHTML = genderOptions
-		.map((option, index) => `<div class="choice${option.value === pendingPerson.gender ? ` selected` : ``}" onclick="chooseNewPersonGender('${which}', ${index})">${option.label}</div>`)
-		.join(``)
-
-	let issue = getNewPersonIssue(pendingPerson)
-
-	document.getElementById(`${prefix}Issue`).textContent = issue == `` ? `` : `\u26a0 ${issue}`
-}
-
-// Choosing the gender that is already chosen clears it again
-function chooseNewPersonGender(which, index) {
-	let pendingPerson = addRelationDraft[which]
-
-	pendingPerson.gender = pendingPerson.gender == genderOptions[index].value ? null : genderOptions[index].value
-
-	renderNewPersonFields(which)
+	updatePersonCreateForm(getNewPersonFieldPrefix(which))
 }
 
 // Every keystroke in the panel keeps the pending person up to date, and the chip that shows its name
@@ -1792,18 +1892,11 @@ function handleAddCoParentSearchKey(event) {
 	}
 }
 
-// The kind of link and the source order of the new entry are chosen here, so the entry is complete when it is added, choosing the one that is already chosen clears the order, and the kind of link goes back to unknown
+// The kind of link of the new entry is chosen here, so the entry is complete when it is added, choosing the one that is already chosen goes back to unknown
 function renderAddRelationChoices() {
-	let chosenSourceOrder = getSourceOrder(addRelationDraft.order)
-
 	document.getElementById(`addRelationSubtypeChoices`).innerHTML = relationSubtypes[addRelationDraft.role]
 		.map((subtype, index) => `<div class="choice${subtype === addRelationDraft.subtype ? ` selected` : ``}" onclick="chooseAddRelationSubtype(${index})">${relationSubtypeLabels[subtype]}</div>`)
 		.join(``)
-	document.getElementById(`addRelationOrderChoices`).innerHTML = sourceOrders
-		.filter((sourceOrder) => sourceOrder.order != 5)
-		.map((sourceOrder) => `<div class="choice${sourceOrder.order === chosenSourceOrder?.order ? ` selected` : ``}" onclick="chooseAddRelationOrder(${sourceOrder.order})">${sourceOrder.label}</div>`)
-		.join(``)
-	document.getElementById(`addRelationOrderDescription`).textContent = chosenSourceOrder ? `${chosenSourceOrder.name} \u00b7 ${chosenSourceOrder.description}` : `Choose how close this source is to the person.`
 }
 
 function chooseAddRelationSubtype(index) {
@@ -1814,13 +1907,7 @@ function chooseAddRelationSubtype(index) {
 	renderAddRelationChoices()
 }
 
-function chooseAddRelationOrder(order) {
-	addRelationDraft.order = addRelationDraft.order === order ? null : order
-
-	renderAddRelationChoices()
-}
-
-// Adds the new entry to the copy of the list in the relations dialog, with one typed source that has the kind of link and the source order chosen, a child with a page gets the other parent that was chosen, the new entry is selected in the relations dialog, which is drawn again, and nothing reaches the person until that dialog is saved
+// Adds the new entry to the copy of the list in the relations dialog, with one typed source that has the kind of link chosen, a child with a page gets the other parent that was chosen, the new entry is selected in the relations dialog, which is drawn again, and nothing reaches the person until that dialog is saved, a person with a page who is added is remembered in addedKeys, because adding someone by hand lets the page work out their link again
 function confirmAddRelation(event) {
 	event.preventDefault()
 
@@ -1840,16 +1927,20 @@ function confirmAddRelation(event) {
 
 	let issue = target.isNew ? syncNewPersonFromForm(`target`) : ``
 
-	if(issue == `` && addRelationDraft.role == `children` && addRelationDraft.coParent?.isNew){
-		issue = syncNewPersonFromForm(`coParent`)
-
-		issue = issue == `` ? `` : `Other parent: ${issue}`
-	}
-
 	if(issue != ``){
-		document.getElementById(`addRelationIssue`).textContent = `\u26a0 ${issue}`
+		showPersonCreateIssue(getNewPersonFieldPrefix(`target`), issue)
 
 		return
+	}
+
+	if(addRelationDraft.role == `children` && addRelationDraft.coParent?.isNew){
+		issue = syncNewPersonFromForm(`coParent`)
+
+		if(issue != ``){
+			showPersonCreateIssue(getNewPersonFieldPrefix(`coParent`), issue, `Other parent: `)
+
+			return
+		}
 	}
 
 	syncRelationsFromForm()
@@ -1858,8 +1949,7 @@ function confirmAddRelation(event) {
 	let entries = relationsDraft.entries[role]
 	let variant = {
 		...getBlankRelationVariant(),
-		subtype : addRelationDraft.subtype,
-		order : addRelationDraft.order
+		subtype : addRelationDraft.subtype
 	}
 	let entry = target.personId !== undefined ? {
 		personId : target.personId,
@@ -1877,6 +1967,10 @@ function confirmAddRelation(event) {
 	}
 
 	entries.push(entry)
+
+	if(target.personId !== undefined){
+		relationsDraft.addedKeys.add(buildBlockedInferenceKey(role, target.personId))
+	}
 
 	relationsDraft.role = role
 	relationsDraft.selectedEntryIndex = entries.length - 1
@@ -1922,22 +2016,14 @@ function selectRelationsVariant(index) {
 	renderRelationsEditor()
 }
 
-// Takes the typed sources of an entry out of the copy, the sources the page worked out stay because they would only be worked out again, an entry that is left with nothing is removed, the click is stopped from reaching the row
+// Takes a whole entry out of the copy, the sources that were typed in and the ones the page worked out, nothing is lost for good because Cancel throws the copy away, when the page had worked the link out, saving records that it must not be worked out again until the person is added by hand, the click is stopped from reaching the row
 function removeRelationsEntry(event, index) {
 	event.stopPropagation()
 	syncRelationsFromForm()
 
 	let entries = getRelationsDraftEntries()
-	let entry = entries[index]
-	let preferredVariant = entry.variants[entry.preferredVariantIndex]
 
-	entry.variants = entry.variants.filter((variant) => variant.isAutoInferred && !variant.isQuestioned)
-
-	if(entry.variants.length == 0){
-		entries.splice(index, 1)
-	} else {
-		entry.preferredVariantIndex = Math.max(entry.variants.indexOf(preferredVariant), 0)
-	}
+	entries.splice(index, 1)
 
 	relationsDraft.selectedEntryIndex = Math.min(relationsDraft.selectedEntryIndex, Math.max(entries.length - 1, 0))
 	relationsDraft.selectedVariantIndex = entries[relationsDraft.selectedEntryIndex]?.preferredVariantIndex ?? 0
@@ -1974,7 +2060,7 @@ function starRelationsVariant(event, index) {
 	renderRelationsEditor()
 }
 
-// Only a typed source can be removed, the star and the selection follow their sources, the star falls back to the first source when its own is removed, and an entry with no source left is removed
+// Any source can be removed, a typed one or one the page worked out, the star and the selection follow their sources, the star falls back to the first source when its own is removed, and an entry with no source left is removed
 function removeRelationsVariant(event, index) {
 	event.stopPropagation()
 	syncRelationsFromForm()
@@ -2020,20 +2106,7 @@ function chooseRelationSubtype(index) {
 	renderRelationsEditor()
 }
 
-// Choosing the order that is already chosen clears it again
-function chooseRelationOrder(order) {
-	let variant = getSelectedRelationsVariant()
-
-	if(!variant || variant.isAutoInferred){
-		return
-	}
-
-	variant.order = variant.order === order ? null : order
-
-	renderRelationsEditor()
-}
-
-// The entries of the side on show, the selected one is marked, the small mark after the kind of link is the same as in the cluster, and removing is only offered when there is a typed source to remove
+// The entries of the side on show, the selected one is marked, the small mark after the kind of link is the same as in the cluster, and every entry can be removed
 function renderRelationsEntries() {
 	let entries = getRelationsDraftEntries()
 
@@ -2042,11 +2115,11 @@ function renderRelationsEntries() {
 		let hasConflict = entry.variants.some((entryVariant) => entryVariant.hasConflict)
 		let isQuestioned = entry.variants.some((entryVariant) => entryVariant.isQuestioned)
 
-		return `<div class="entry person${index == relationsDraft.selectedEntryIndex ? ` selected` : ``}" onclick="selectRelationsEntry(${index})"><span class="text">${escapeHtml(getRelationEntryLabel(entry))}${entry.isNew ? ` (new)` : entry.personId == null ? ` (plain text)` : ``}</span><span class="meta">${variant ? relationSubtypeLabels[variant.subtype] ?? `` : ``}${hasConflict ? ` !` : ``}${isQuestioned ? ` ?` : ``}</span>${entry.variants.some((entryVariant) => !entryVariant.isAutoInferred || entryVariant.isQuestioned) ? `<span class="remove" onclick="removeRelationsEntry(event, ${index})">remove</span>` : ``}</div>`
+		return `<div class="entry person${index == relationsDraft.selectedEntryIndex ? ` selected` : ``}" onclick="selectRelationsEntry(${index})"><span class="text">${escapeHtml(getRelationEntryLabel(entry))}${entry.isNew ? ` (new)` : entry.personId == null ? ` (plain text)` : ``}</span><span class="meta">${variant ? relationSubtypeLabels[variant.subtype] ?? `` : ``}${hasConflict ? ` !` : ``}${isQuestioned ? ` ?` : ``}</span><span class="remove" onclick="removeRelationsEntry(event, ${index})">remove</span></div>`
 	}).join(``)}`
 }
 
-// The sources of the selected entry with the star, then the pills and the boxes for the selected source, a source worked out by the page cannot be edited and says so, and a source that disagrees with the parents or that was worked out from parents that changed says so as well
+// The sources of the selected entry with the star, then the boxes for the selected source with the note first and the links under it, a source worked out by the page cannot be edited and says so, and a source that disagrees with the parents or that was worked out from parents that changed says so as well, the links are only redrawn when they are not the ones in the boxes already
 function renderRelationsEditor() {
 	let entry = getSelectedRelationsEntry()
 	let variant = getSelectedRelationsVariant()
@@ -2055,20 +2128,7 @@ function renderRelationsEditor() {
 	let isEditable = Boolean(variant) && !variant.isAutoInferred
 
 	variantsElement.innerHTML = !entry ? `` : `<div class="heading"><span>Entered sources \u00b7 ${escapeHtml(getRelationEntryLabel(entry))}</span><span class="action" onclick="addRelationsVariant()">+ add another</span></div>${entry.variants.map((entryVariant, index) => {
-		let sourceOrder = getSourceOrder(entryVariant.order)
-		let extraParts = []
-
-		if(entryVariant.note){
-			extraParts.push(escapeHtml(entryVariant.note))
-		}
-
-		if(entryVariant.link){
-			extraParts.push(isWebAddress(entryVariant.link)
-				? `<a href="${escapeHtml(entryVariant.link)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">${escapeHtml(getLinkLabel(entryVariant.link))}</a>`
-				: escapeHtml(entryVariant.link))
-		}
-
-		return `<div class="entry${index == relationsDraft.selectedVariantIndex ? ` selected` : ``}" onclick="selectRelationsVariant(${index})"><span class="star" onclick="starRelationsVariant(event, ${index})">${index == entry.preferredVariantIndex ? `\u2605` : `\u2606`}</span><span class="text">${relationSubtypeLabels[entryVariant.subtype] ?? `Unknown`}${entryVariant.hasConflict ? ` !` : ``}${entryVariant.isQuestioned ? ` ?` : ``}</span><span class="meta">${entryVariant.isAutoInferred ? `Inferred` : sourceOrder ? `${sourceOrder.name} \u00b7 ${sourceOrder.label}` : `Source not set`}</span>${entryVariant.isAutoInferred && !entryVariant.isQuestioned ? `` : `<span class="remove" onclick="removeRelationsVariant(event, ${index})">remove</span>`}${extraParts.length > 0 ? `<span class="extra">${extraParts.join(` \u00b7 `)}</span>` : ``}</div>`
+		return `<div class="entry${index == relationsDraft.selectedVariantIndex ? ` selected` : ``}" onclick="selectRelationsVariant(${index})"><span class="star" onclick="starRelationsVariant(event, ${index})">${index == entry.preferredVariantIndex ? `\u2605` : `\u2606`}</span><span class="text">${relationSubtypeLabels[entryVariant.subtype] ?? `Unknown`}${entryVariant.hasConflict ? ` !` : ``}${entryVariant.isQuestioned ? ` ?` : ``}</span><span class="meta">${entryVariant.isAutoInferred || entryVariant.hasInference === true ? `Inferred` : ``}</span><span class="remove" onclick="removeRelationsVariant(event, ${index})">remove</span>${buildRelationVariantExtraHtml(entryVariant)}</div>`
 	}).join(``)}`
 
 	document.getElementById(`relationsSubtypeHeading`).textContent = isEditable ? `Kind of link` : ``
@@ -2076,23 +2136,20 @@ function renderRelationsEditor() {
 		.map((subtype, index) => `<div class="choice${subtype === variant.subtype ? ` selected` : ``}" onclick="chooseRelationSubtype(${index})">${relationSubtypeLabels[subtype]}</div>`)
 		.join(``)
 
-	let chosenSourceOrder = isEditable ? getSourceOrder(variant.order) : null
-
-	document.getElementById(`relationsOrderHeading`).textContent = isEditable ? `Source order` : ``
-	document.getElementById(`relationsOrderChoices`).innerHTML = !isEditable ? `` : sourceOrders
-		.filter((sourceOrder) => sourceOrder.order != 5)
-		.map((sourceOrder) => `<div class="choice${sourceOrder.order === chosenSourceOrder?.order ? ` selected` : ``}" onclick="chooseRelationOrder(${sourceOrder.order})">${sourceOrder.label}</div>`)
-		.join(``)
-	document.getElementById(`relationsOrderDescription`).textContent = !isEditable ? `` : chosenSourceOrder ? `${chosenSourceOrder.name} \u00b7 ${chosenSourceOrder.description}` : `Choose how close this source is to the person.`
-
-	document.getElementById(`relationsLink`).hidden = !isEditable
 	document.getElementById(`relationsNote`).hidden = !isEditable
+	document.getElementById(`relationsLinks`).hidden = !isEditable
+
+	renderDynamicLinks(`relationsLinks`, variant?.links ?? [], () => updateRelationsDialog())
 
 	let noticeElement = document.getElementById(`relationsNotice`)
 	let noticeParts = []
 
 	if(variant?.isAutoInferred){
-		noticeParts.push(`Worked out from the parents that were entered, it updates itself, give a source of your own with + add another.`)
+		noticeParts.push(`Worked out from the parents that were entered, it updates itself, give a source of your own with + add another, removing it stops it being worked out again until this person is added by hand.`)
+	}
+
+	if(variant?.hasInference){
+		noticeParts.push(`The page also worked this kind of link out from the parents that were entered, it is shown with your source and updates itself, removing the source stops it being worked out again until this person is added by hand.`)
 	}
 
 	if(variant?.hasConflict){
@@ -2219,14 +2276,14 @@ function getCoParentTemplateVariant(activeId, childId) {
 	let childEntry = findRelationEntry(persons[activeId], `children`, childId)
 	let preferredVariant = childEntry ? getPreferredRelationVariant(childEntry) : null
 	let templateVariant = preferredVariant && !preferredVariant.isAutoInferred ? preferredVariant : childEntry ? getManualVariants(childEntry)[0] : null
-	let copy = { ...(templateVariant ?? getBlankRelationVariant()) }
+	let copy = copyVariantWithoutInference(templateVariant ?? getBlankRelationVariant())
 
 	delete copy.hasConflict
 
 	return copy
 }
 
-// Makes sure a person has a typed link to another in a role, with the given source, a link that is already typed is left as it is, so nothing is ever listed twice, a person who is linked to the other under a different role is left alone, and the other side is mirrored
+// Makes sure a person has a typed link to another in a role, with the given source, a link that is already typed is left as it is, so nothing is ever listed twice, a person who is linked to the other under a different role is left alone, adding the link by hand lets the page work it out again, and the other side is mirrored
 function ensureManualRelation(ownerId, role, targetId, templateVariant) {
 	let owner = persons[ownerId]
 
@@ -2253,6 +2310,8 @@ function ensureManualRelation(ownerId, role, targetId, templateVariant) {
 	}
 
 	if(getManualVariants(entry).length == 0){
+		unblockInference(owner, role, targetId)
+
 		entry.variants = [{ ...templateVariant }, ...entry.variants]
 		entry.preferredVariantIndex = 0
 	}
@@ -2343,66 +2402,9 @@ function applyChildCoParent(entry, activeId, touchedIds) {
 	}
 }
 
-// Makes a page for a pending new person, with the name and whatever else was filled in, the gender, a birth date, a death date, or the mark that they are deceased with no date, none of it has a source order, a link or a note, and the new person is the one with the next free id
+// Makes a page for a pending new person, with the name and whatever else was filled in, the gender, a birth date, a death date, or the mark that they are deceased with no date, none of it has a link or a note, and the new person is the one with the next free id
 function createPersonFromPending(pendingPerson) {
-	let ids = Object.keys(persons).map(Number)
-	let newPersonId = ids.length > 0 ? Math.max(...ids) + 1 : 1
-	let newPerson = {
-		names : {
-			preferredVariantIndex : 0,
-			variants : [
-				{
-					firstName : pendingPerson.firstName ?? null,
-					lastName : pendingPerson.lastName ?? null,
-					order : null,
-					link : null,
-					note : null
-				}
-			]
-		}
-	}
-
-	if(genderOptions.some((option) => option.value === pendingPerson.gender)){
-		newPerson.gender = {
-			preferredVariantIndex : 0,
-			variants : [
-				{
-					value : pendingPerson.gender,
-					order : null,
-					link : null,
-					note : null
-				}
-			]
-		}
-	}
-
-	for(let kind of [`birth`, `death`]){
-		let date = pendingPerson[kind]
-
-		if(date){
-			newPerson[kind] = {
-				preferredVariantIndex : 0,
-				variants : [
-					{
-						year : date.year == `` ? null : Number(date.year),
-						month : date.month == `` ? null : Number(date.month),
-						day : date.day == `` ? null : Number(date.day),
-						order : null,
-						link : null,
-						note : null
-					}
-				]
-			}
-		}
-	}
-
-	if(pendingPerson.isDeceased && !newPerson.death){
-		newPerson.isDeceased = true
-	}
-
-	persons[newPersonId] = newPerson
-
-	return newPersonId
+	return createPersonRecord(pendingPerson)
 }
 
 // Until the relations dialog is saved a person who does not exist yet is only { isNew, firstName, lastName, gender, birth, death, isDeceased } on an entry or on its other parent, so nothing is left behind when a dialog is cancelled, saving makes a page for each of them and puts { personId } in their place, the same name written twice in one save is one new person, made from the first one that was found, and the ids of the new people are answered so they take part in the inference
@@ -2437,7 +2439,7 @@ function materializePendingPeople() {
 	return [...createdIds.values()]
 }
 
-// The typed sources are written to the person and mirrored on the other side, the ones that were taken out are taken out of the other side first so a person who changes role is not left linked twice, the lists then take the dialog's copy, which still holds the sources the page worked out, and what can be worked out is worked out for the person and everyone who was touched, then viewPerson redraws the page and saves
+// The typed sources are written to the person and mirrored on the other side, the ones that were taken out are taken out of the other side first so a person who changes role is not left linked twice, the lists then take the dialog's copy, which still holds the sources the page worked out, and what can be worked out is worked out for the person and everyone who was touched, then viewPerson redraws the page and saves, a link that the page had worked out and that the dialog took away is recorded on both sides, so the page does not work it out again, and a person who was added by hand in the dialog is taken off that record again, a typed source whose kind of link matches a source that the page worked out on its own absorbs it before anything is worked out again
 function saveRelations(event) {
 	event.preventDefault()
 	syncRelationsFromForm()
@@ -2450,6 +2452,7 @@ function saveRelations(event) {
 	}
 
 	let touchedIds = new Set([activeId, ...materializePendingPeople()])
+	let removedInferences = []
 
 	for(let role of relationRoles){
 		for(let existingEntry of person.relations?.[role] ?? []){
@@ -2464,6 +2467,13 @@ function saveRelations(event) {
 			if(getManualVariants(existingEntry).length > 0 && (!draftEntry || getManualVariants(draftEntry).length == 0)){
 				removeReciprocalRelation(activeId, role, existingEntry.personId)
 			}
+
+			if(getUnquestionedInferences(existingEntry).length > (draftEntry ? getUnquestionedInferences(draftEntry).length : 0)){
+				removedInferences.push({
+					role : role,
+					targetId : existingEntry.personId
+				})
+			}
 		}
 	}
 
@@ -2473,6 +2483,12 @@ function saveRelations(event) {
 
 			return savedEntry
 		})
+	}
+
+	for(let role of relationRoles){
+		for(let entry of person.relations[role]){
+			absorbDuplicateInferences(entry)
+		}
 	}
 
 	for(let role of relationRoles){
@@ -2488,6 +2504,32 @@ function saveRelations(event) {
 	for(let entry of relationsDraft.entries.children){
 		if(entry.personId != null){
 			applyChildCoParent(entry, activeId, touchedIds)
+		}
+	}
+
+	for(let removedInference of removedInferences){
+		let reciprocalRole = getReciprocalRole(removedInference.role)
+		let target = persons[removedInference.targetId]
+		let reciprocalEntry = target ? findRelationEntry(target, reciprocalRole, activeId) : null
+
+		blockInference(person, removedInference.role, removedInference.targetId)
+
+		if(reciprocalEntry && reciprocalEntry.variants.some((variant) => variant.isAutoInferred)){
+			blockInference(target, reciprocalRole, activeId)
+		}
+	}
+
+	for(let key of relationsDraft.addedKeys){
+		let [role, targetText] = key.split(`:`)
+		let targetId = Number(targetText)
+		let draftEntry = relationsDraft.entries[role]?.find((entry) => entry.personId === targetId)
+
+		if(draftEntry && getManualVariants(draftEntry).length > 0){
+			unblockInference(person, role, targetId)
+
+			if(persons[targetId]){
+				unblockInference(persons[targetId], getReciprocalRole(role), activeId)
+			}
 		}
 	}
 
