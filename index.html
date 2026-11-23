@@ -200,6 +200,7 @@
 		</dialog>
 	</body>
 	<script type="text/javascript"src="scripts.js"></script>
-	<script type="text/javascript"src="relations.js"></script>
+	<!-- timeline.js is read before relations.js because relations.js starts the app when it is read, and the first drawing of the remembered person already needs the timeline -->
 	<script type="text/javascript"src="timeline.js"></script>
+	<script type="text/javascript"src="relations.js"></script>
 </html>
