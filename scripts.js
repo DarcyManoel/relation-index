@@ -323,6 +323,7 @@ function viewPerson(id = activeHistory.at(-1)) {
 		document.getElementById(`lifespan`).innerHTML = ``
 
 		clearRelations()
+		clearTimeline()
 		updateRecentMenu()
 		saveData()
 
@@ -349,6 +350,7 @@ function viewPerson(id = activeHistory.at(-1)) {
 	}
 
 	renderRelations(id)
+	renderTimeline(id)
 
 	if(shouldFocusRelation){
 		focusFirstProfileRelation()
