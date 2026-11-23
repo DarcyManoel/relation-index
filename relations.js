@@ -1376,6 +1376,68 @@ function getKinshipLabel(targetId) {
 	return steps && steps.length > 0 ? describeKinshipSteps(steps) : `Person`
 }
 
+// A person has a path to open in the search results when someone is on screen, the result is somebody else, and findKinshipPath finds a way of at least one step between them
+function hasKinshipPath(targetId) {
+	let activeId = activeHistory.at(-1)
+
+	if(activeId == null || !persons[activeId] || !persons[Number(targetId)] || Number(targetId) === Number(activeId)){
+		return false
+	}
+
+	let steps = findKinshipPath(Number(activeId), Number(targetId))
+
+	return Boolean(steps && steps.length > 0)
+}
+
+// One step is described on its own, as the word for the person it reaches and the kind of link, the word is worked out from a copy of the step with a plain subtype, because describeKinshipSteps would otherwise put the kind in the word as well, such as Step-daughter and Half-sister, and Spouse for Partner, and the real kind is written after it, such as Daughter \u00b7 Step
+function getKinshipStepDescription(step) {
+	let plainStep = {
+		...step,
+		subtype : step.kind == `partner` ? `partner` : `biological`
+	}
+
+	return `${describeKinshipSteps([plainStep])} \u00b7 ${relationSubtypeLabels[step.subtype] ?? relationSubtypeLabels.unknown}`
+}
+
+// One row of the chain, the whole row opens the page of the person, and the name and the description are escaped because they are typed by the user
+function buildKinshipStepHtml(personId, description) {
+	let genderValue = getPreferredGender(persons[personId])?.value ?? `unknown`
+
+	return `<div class="step" onclick="closeKinshipDialog(); viewPerson(${personId})"><div class="badge ${escapeHtml(genderValue)}"></div><div class="info"><div class="name">${escapeHtml(getNameLabel(persons[personId]))}</div><div class="meta">${escapeHtml(description)}</div></div></div>`
+}
+
+// Shows the shortest path from the person on screen to the target, the person on screen first and then everyone the path reaches, with an arrow between the rows, nothing opens when there is no path
+function openKinshipDialog(targetId) {
+	let activeId = activeHistory.at(-1)
+
+	targetId = Number(targetId)
+
+	if(activeId == null || !persons[activeId] || !persons[targetId]){
+		return
+	}
+
+	let steps = findKinshipPath(Number(activeId), targetId)
+
+	if(!steps || steps.length == 0){
+		return
+	}
+
+	document.getElementById(`kinshipTitle`).textContent = getKinshipLabel(targetId)
+	document.getElementById(`kinshipSummary`).innerHTML = `<div class="fine">${escapeHtml(getNameLabel(persons[activeId]))} \u2192 ${escapeHtml(getNameLabel(persons[targetId]))}</div>`
+	document.getElementById(`kinshipChain`).innerHTML = [
+		buildKinshipStepHtml(activeId, `Active person`),
+		...steps.map((step) => buildKinshipStepHtml(step.toId, getKinshipStepDescription(step)))
+	].join(`<div class="arrow">\u2193</div>`)
+
+	if(!document.getElementById(`kinshipDialog`).open){
+		document.getElementById(`kinshipDialog`).showModal()
+	}
+}
+
+function closeKinshipDialog() {
+	document.getElementById(`kinshipDialog`).close()
+}
+
 // Oldest first, by the starred birth date, the parts that are not known sort after the ones that are, so a year only comes before a full date of the same year, and a person written down as plain text has no birth to go by so they come after everyone who has a page
 function getRelationSortKey(entry) {
 	if(entry.personId == null){

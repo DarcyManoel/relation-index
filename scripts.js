@@ -462,9 +462,11 @@ function buildHighlightHtml(text, terms) {
 	return `${html}${escapeHtml(text.slice(position))}`
 }
 
-// The fine text says how the person is related to the person on screen, or Person when they are not, and when the name that matched is not the starred one the name the page shows is added so the result is not a surprise
+// The fine text says how the person is related to the person on screen, or Person when they are not, and when the name that matched is not the starred one the name the page shows is added so the result is not a surprise, when there is a path to the person the fine text can be held under the mouse, the stylesheet fills it from left to right while it is held and the path dialog opens when the fill is complete, moving the mouse away stops the fill so nothing opens, clicking still opens the person like everywhere else on the result
 function buildSearchResultHtml(match, terms) {
-	return `<div class="result" onclick="openSearchResult(${match.id})"><div class="text">${buildHighlightHtml(match.text, terms)}</div><div class="kind">${escapeHtml(getKinshipLabel(match.id))}${match.isPreferred ? `` : ` \u00b7 shown as ${escapeHtml(match.label)}`}</div></div>`
+	let pathAttributes = hasKinshipPath(match.id) ? ` class="kind hasPath" onanimationend="openKinshipDialog(${match.id})"` : ` class="kind"`
+
+	return `<div class="result" onclick="openSearchResult(${match.id})"><div class="text">${buildHighlightHtml(match.text, terms)}</div><div${pathAttributes}>${escapeHtml(getKinshipLabel(match.id))}${match.isPreferred ? `` : ` \u00b7 shown as ${escapeHtml(match.label)}`}</div></div>`
 }
 
 // Runs on every keystroke and when the box is focused again, an empty box lists nothing, only people can be found

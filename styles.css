@@ -414,6 +414,17 @@ body{
 				background: rgba(200, 200, 200, .5);
 				border-radius: 1em;
 			}
+			&:not(.keyboardNav)>.result>.kind.hasPath:hover{
+				@media (hover: hover){
+					-webkit-background-clip: text;
+					animation: kinshipFill 1.5s linear .3s forwards;
+					background-clip: text;
+					background-image: linear-gradient(black, black), linear-gradient(grey, grey);
+					background-repeat: no-repeat;
+					background-size: 0% 100%, 100% 100%;
+					color: transparent;
+				}
+			}
 			mark{
 				background: rgba(150, 150, 150, .5);
 				border-radius: .2em;
@@ -448,6 +459,10 @@ body{
 					overflow: hidden;
 					text-overflow: ellipsis;
 					white-space: nowrap;
+					&.hasPath{
+						max-width: 100%;
+						width: fit-content;
+					}
 				}
 			}
 			>.none{
@@ -794,6 +809,7 @@ body{
 		&#nameDialog{
 			width: min(24em, calc(100vw - 2em));
 		}
+		&#kinshipDialog,
 		&#newPersonDialog{
 			width: min(26em, calc(100vw - 2em));
 		}
@@ -846,6 +862,81 @@ body{
 				>.warning{
 					font-size: .8em;
 					font-weight: bold;
+				}
+			}
+			>.chain{
+				display: flex;
+				flex-direction: column;
+				gap: .4em;
+				margin: .25em 0;
+				&:empty{
+					display: none;
+				}
+				>.arrow{
+					color: grey;
+					font-size: .8em;
+					line-height: 1;
+					margin-left: .5em;
+					text-align: center;
+					user-select: none;
+					width: 2.2em;
+				}
+				>.step{
+					align-items: center;
+					border-radius: .5em;
+					cursor: pointer;
+					display: flex;
+					gap: .6em;
+					padding: .3em .5em;
+					&:hover{
+						background: rgba(200, 200, 200, .3);
+					}
+					>.badge{
+						--ink: #808080;
+						--tint: rgba(200, 200, 200, .3);
+						aspect-ratio: 1;
+						background: var(--tint);
+						border-radius: 50%;
+						flex: none;
+						height: 2.2em;
+						position: relative;
+						width: 2.2em;
+						&.male{
+							--ink: #4a76a8;
+							--tint: rgba(100, 150, 220, .22);
+						}
+						&.female{
+							--ink: #b55674;
+							--tint: rgba(220, 115, 145, .22);
+						}
+						&.non-binary{
+							--ink: #7b56b0;
+							--tint: rgba(155, 115, 215, .22);
+						}
+						&.unknown{
+							--ink: #808080;
+							--tint: rgba(200, 200, 200, .3);
+						}
+						&::after{
+							background: var(--ink);
+							content: '';
+							inset: 0;
+							mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='8' r='4'/%3E%3Cpath d='M4 21c0-4.5 3.5-7 8-7s8 2.5 8 7z'/%3E%3C/svg%3E") center / 65% no-repeat;
+							position: absolute;
+						}
+					}
+					>.info{
+						display: flex;
+						flex-direction: column;
+						min-width: 0;
+						>.name{
+							overflow-wrap: anywhere;
+						}
+						>.meta{
+							color: grey;
+							font-size: .8em;
+						}
+					}
 				}
 			}
 			>.shortcuts{
@@ -1232,5 +1323,11 @@ body{
 				}
 			}
 		}
+	}
+}
+
+@keyframes kinshipFill{
+	to{
+		background-size: 100% 100%, 100% 100%;
 	}
 }
