@@ -14,6 +14,7 @@ let exportState = {
 }
 let savedDataText = null
 let exportWarningChangeCount = 20
+let exportUrgentChangeCount = 5
 
 // Everything that has to survive a refresh is written here
 function saveData() {
@@ -21,7 +22,6 @@ function saveData() {
 	localStorage.setItem(`activeHistory`, JSON.stringify(activeHistory))
 
 	countChangesSinceLastSave()
-	scheduleExportSizeUpdate()
 }
 
 // Names are typed by the user and end up inside innerHTML, so markup characters are escaped first
@@ -2004,15 +2004,12 @@ function sanitizeGender(person) {
 	}
 }
 
-// Export and import move everything in one JSON file that can be read and edited by hand, it holds the people and the history
-let exportSizeTimer = null
-
-// The same text is used for the file and for the size, so the size shown is exactly the size of what would be written, tabs keep the file readable
+// Export and import move everything in one JSON file that can be read and edited by hand, it holds the people and the history, tabs keep the file readable
 function buildExportText() {
 	return JSON.stringify(buildExportData(), null, `\t`)
 }
 
-// The exported time has a fixed length, so it never changes the size
+// What goes into the file, the version is the shape the import accepts and the time is when the export was made
 function buildExportData() {
 	return {
 		version : 1,
@@ -2020,35 +2017,6 @@ function buildExportData() {
 		persons : persons,
 		activeHistory : activeHistory
 	}
-}
-
-// Decimal units, the same as the ones the system shows for files
-function formatByteSize(bytes) {
-	if(bytes < 1000){
-		return `${bytes} B`
-	}
-
-	if(bytes < 1000000){
-		return `${Math.round(bytes / 1000)} KB`
-	}
-
-	if(bytes < 1000000000){
-		return `${(bytes / 1000000).toFixed(1)} MB`
-	}
-
-	return `${(bytes / 1000000000).toFixed(2)} GB`
-}
-
-// Saving happens often and the data has to be written out as text to be measured, so the size is only worked out a moment after the last change
-function scheduleExportSizeUpdate() {
-	clearTimeout(exportSizeTimer)
-
-	exportSizeTimer = setTimeout(updateExportSize, 400)
-}
-
-// The size of the file Export would write, it is exact because it is the size of the very text that would be written, so it is worked out at once
-function updateExportSize() {
-	document.getElementById(`exportSize`).textContent = formatByteSize(new Blob([buildExportText()]).size)
 }
 
 // The browser is asked to save the file as a download, the temporary address is released afterwards, but not at once because some browsers start reading it a moment after the click
@@ -2235,10 +2203,14 @@ function markImported(exportedAt) {
 	updateExportNote()
 }
 
-// The note under the Export button is always there, it says when the last export was and how many changes have been made since, it is grey until exportWarningChangeCount changes pile up, and then it turns the orange used for the other notices, because that much work would be lost if the browser lost its storage, an empty browser that never exported has nothing to say
+// The note under the Export button only shows while the mouse is on the button, it says when the last export was and how many changes have been made since and it is always grey, the warning is the colour of the Export icon instead, so it can be seen without hovering, amber from the first change and red from exportUrgentChangeCount changes, because that much work would be lost if the browser lost its storage, an empty browser that never exported has nothing to say
 function updateExportNote() {
+	let exportElement = document.getElementById(`export`)
 	let noteElement = document.getElementById(`exportNote`)
 	let hasData = Object.keys(persons).length > 0
+
+	exportElement.classList.toggle(`hasChanges`, exportState.changeCount >= 1 && exportState.changeCount < exportUrgentChangeCount)
+	exportElement.classList.toggle(`urgentBackup`, exportState.changeCount >= exportUrgentChangeCount)
 
 	if(!hasData && !exportState.exportedAt){
 		noteElement.textContent = ``
@@ -2247,7 +2219,6 @@ function updateExportNote() {
 	}
 
 	noteElement.textContent = `${exportState.exportedAt ? `Last exported ${formatTimeAgo(exportState.exportedAt)}` : `Never exported`}${exportState.changeCount > 0 ? ` \u00b7 ${describeCount(exportState.changeCount, `change`, `changes`)}` : ``}`
-	noteElement.className = exportState.changeCount >= exportWarningChangeCount ? `warning` : ``
 }
 
 // Import opens this dialog before anything else, it says what is in the browser now, where it came from and how long ago it last changed, so nobody replaces their data without seeing what would be lost, Export first is only offered when there is something to lose
@@ -2358,7 +2329,6 @@ function applyImport(data) {
 
 	closeImportDialog()
 	viewPerson()
-	scheduleExportSizeUpdate()
 }
 
 // Dates and names saved in their old forms are turned into lists, a single link of an older version becomes a list of links and the source orders that are not used any more are dropped, the profile picture ids and crops of the time when the page had pictures are dropped, and so are the pictures themselves, which were kept in localStorage and in an IndexedDB database, relations are made safe and the list of plain text relatives is built, and the person on screen before the refresh is shown again, nothing is shown when the history is empty, this is a function because relations.js is read after this file and calls it when it is ready, the first drawing of a person needs the relations
@@ -2373,7 +2343,6 @@ function startApp() {
 	rebuildPlainTextRelationIndex()
 	rememberSavedData()
 	viewPerson()
-	scheduleExportSizeUpdate()
 	updateExportNote()
 	setInterval(updateExportNote, 60000)?.unref?.()
 	document.getElementById(`search`).addEventListener(`blur`, closeSearch)
