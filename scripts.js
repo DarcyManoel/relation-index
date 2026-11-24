@@ -286,7 +286,7 @@ function saveNewPerson(event) {
 	viewPerson(newId)
 }
 
-// The window prompt is a confirm so nothing is removed unless OK is pressed, then every visit to that person is taken out of the history so viewPerson falls back to the person viewed before them
+// The window prompt is a confirm so nothing is removed unless OK is pressed, then every visit to that person is taken out of the history, and the directory of all people is opened, the history still holds the person viewed before, so back from the directory returns to them
 function deletePerson() {
 	let id = activeHistory.at(-1)
 
@@ -299,10 +299,10 @@ function deletePerson() {
 	delete persons[id]
 	activeHistory = activeHistory.filter((historyId) => historyId != id)
 
-	viewPerson()
+	openDirectory()
 }
 
-// Ids come back from localStorage as text so they are turned into numbers first, a person is only added to the history when they are not already the one on screen, and an id with no person clears the screen
+// Ids come back from localStorage as text so they are turned into numbers first, a person is only added to the history when they are not already the one on screen, and an id with no person clears the profile and shows the directory of all people instead
 function viewPerson(id = activeHistory.at(-1)) {
 	id = Number(id)
 
@@ -324,8 +324,7 @@ function viewPerson(id = activeHistory.at(-1)) {
 
 		clearRelations()
 		clearTimeline()
-		updateRecentMenu()
-		saveData()
+		openDirectory()
 
 		return
 	}
@@ -334,6 +333,7 @@ function viewPerson(id = activeHistory.at(-1)) {
 		activeHistory.push(id)
 	}
 
+	setDirectoryVisible(false)
 	saveData()
 	updateRecentMenu()
 
@@ -369,8 +369,14 @@ function updateRecentMenu() {
 		.join(``)
 }
 
-// Going back drops the person on screen, and any repeats of them at the end of the history, so the person viewed before is shown, and nothing happens when there is nobody earlier
+// Going back drops the person on screen, and any repeats of them at the end of the history, so the person viewed before is shown, and nothing happens when there is nobody earlier, while the directory is open nobody is dropped, back simply shows the person that was on screen before the directory was opened
 function goBack() {
+	if(isDirectoryOpen() && persons[activeHistory.at(-1)]){
+		viewPerson()
+
+		return
+	}
+
 	let currentId = activeHistory.at(-1)
 	let previousIndex = activeHistory.findLastIndex((historyId) => historyId !== currentId)
 
@@ -699,6 +705,230 @@ function openProfileFocus(element) {
 	}
 }
 
+// The directory of all people is shown instead of the profile, never together with it, it is on screen when the toolbar button was pressed, when there is no person to show, and after the person on screen was deleted, hiding either one clears the keyboard focus of the directory, because the rows it pointed at are about to be drawn again or are gone
+function isDirectoryOpen() {
+	return !document.getElementById(`directory`).hidden
+}
+
+function setDirectoryVisible(isVisible) {
+	clearDirectoryFocus()
+
+	document.getElementById(`directory`).hidden = !isVisible
+	document.getElementById(`profile`).hidden = isVisible
+}
+
+// Draws the directory and shows it, the history is left alone so the person who was on screen before can still be reached with back, and the history is saved because a deleted person has just been taken out of it
+function openDirectory() {
+	clearProfileFocus()
+	renderDirectory()
+	setDirectoryVisible(true)
+	updateRecentMenu()
+	saveData()
+}
+
+// The people of the directory are grouped by the last name of their starred name, names are compared without case, accents and extra spaces, so Smith and SMITH are one group, the groups are in alphabetical order and the people with no last name are the final group, the people of a group go from the earliest birth to the latest, and the people with no birth year are at the bottom of their group, a birth with no month or day counts as the first of the year, so a less exact date comes before a more exact one of the same year, people with the same birth are put in the order of their names, and then of their ids, so the order never changes between two drawings
+function getDirectoryBirthParts(person) {
+	let birth = getPreferredDate(person, `birth`)
+
+	if(birth?.year == null){
+		return null
+	}
+
+	return [birth.year, birth.month ?? 0, birth.day ?? 0]
+}
+
+function compareDirectoryEntries(firstEntry, secondEntry) {
+	let birthDifference = 0
+
+	if(firstEntry.birthParts && secondEntry.birthParts){
+		birthDifference = firstEntry.birthParts
+			.map((part, partIndex) => part - secondEntry.birthParts[partIndex])
+			.find((difference) => difference != 0) ?? 0
+	} else if(firstEntry.birthParts){
+		birthDifference = -1
+	} else if(secondEntry.birthParts){
+		birthDifference = 1
+	}
+
+	return birthDifference || getNameLabel(firstEntry.person).localeCompare(getNameLabel(secondEntry.person)) || firstEntry.personId - secondEntry.personId
+}
+
+function getDirectoryGroups() {
+	let groups = new Map()
+
+	for(let [personId, person] of Object.entries(persons)){
+		let lastName = getPreferredName(person).lastName ?? ``
+		let groupKey = normalizeNameText(lastName)
+
+		if(!groups.has(groupKey)){
+			groups.set(groupKey, {
+				groupKey : groupKey,
+				title : `No last name`,
+				entries : []
+			})
+		}
+
+		groups.get(groupKey).entries.push({
+			person : person,
+			personId : Number(personId),
+			birthParts : getDirectoryBirthParts(person)
+		})
+	}
+
+	for(let group of groups.values()){
+		group.entries.sort(compareDirectoryEntries)
+
+		if(group.groupKey != ``){
+			group.title = getPreferredName(group.entries[0].person).lastName
+		}
+	}
+
+	return [...groups.values()].sort((firstGroup, secondGroup) => firstGroup.groupKey == `` ? 1 : secondGroup.groupKey == `` ? -1 : firstGroup.groupKey.localeCompare(secondGroup.groupKey))
+}
+
+// The years of a person as they are shown in the directory, a living person runs up to present, a person who is dead with no death year has a question mark for the end, and a person with no known year at all has unknown dates
+function getDirectoryLifespanText(person) {
+	let birth = getPreferredDate(person, `birth`)
+	let death = getPreferredDate(person, `death`)
+
+	if(birth?.year == null){
+		return death?.year == null ? `Dates unknown` : `? \u2013 ${death.year}`
+	}
+
+	if(death?.year != null){
+		return `${birth.year} \u2013 ${death.year}`
+	}
+
+	return `${birth.year} \u2013 ${death != null || person.isDeceased === true ? `?` : `present`}`
+}
+
+function hasDirectoryRelations(person) {
+	return [`parents`, `siblings`, `partners`, `children`].some((role) => (person.relations?.[role] ?? []).length > 0)
+}
+
+// What is still missing on a person, a gender, a birth or any relation, the tags are grey and sit at the right of the row
+function getDirectoryMissingTags(person) {
+	let missingTags = []
+
+	if(!getPreferredGender(person)){
+		missingTags.push(`No gender`)
+	}
+
+	if(!getPreferredDate(person, `birth`)){
+		missingTags.push(`No birth`)
+	}
+
+	if(!hasDirectoryRelations(person)){
+		missingTags.push(`No relations`)
+	}
+
+	return missingTags
+}
+
+// One row, the badge is tinted by the starred gender like on the profile, and clicking the row opens the person
+function buildDirectoryPersonHtml(entry) {
+	let genderValue = getPreferredGender(entry.person)?.value ?? `unknown`
+	let tagsHtml = getDirectoryMissingTags(entry.person)
+		.map((tagText) => `<span class="tag">${tagText}</span>`)
+		.join(``)
+
+	return `<div class="person" data-person-id="${entry.personId}" onclick="viewPerson(${entry.personId})"><span class="badge ${escapeHtml(genderValue)}"></span><span class="info"><span class="name">${escapeHtml(getNameLabel(entry.person))}</span><span class="lifespan">${escapeHtml(getDirectoryLifespanText(entry.person))}</span></span><span class="missing">${tagsHtml}</span></div>`
+}
+
+function buildDirectoryGroupHtml(group) {
+	return `<div class="group"><div class="heading">${escapeHtml(group.title)}</div><div class="people">${group.entries.map(buildDirectoryPersonHtml).join(``)}</div></div>`
+}
+
+// The header with the number of people is always there, an empty database gets a message that says how to add the first person
+function renderDirectory() {
+	let personCount = Object.keys(persons).length
+	let headerHtml = `<div class="header"><span class="title">People</span><span class="count">${personCount}</span></div>`
+
+	if(personCount == 0){
+		document.getElementById(`directory`).innerHTML = `${headerHtml}<div class="empty">Nobody is here yet, press add to create the first person.</div>`
+
+		return
+	}
+
+	document.getElementById(`directory`).innerHTML = `${headerHtml}<div class="groups">${getDirectoryGroups().map(buildDirectoryGroupHtml).join(``)}</div>`
+}
+
+// The row of the directory that the keyboard is on, counted from the top, and minus one while there is none, the row carries the kbdFocus class, and while the keyboard is on a row the directory has the keyboardNav class, which switches the highlight of the mouse off so only one row is ever highlighted
+let directoryFocusIndex = -1
+
+function getDirectoryRows() {
+	return [...document.querySelectorAll(`#directory .person`)]
+}
+
+function clearDirectoryFocus() {
+	for(let element of document.querySelectorAll(`#directory .kbdFocus`)){
+		element.classList.remove(`kbdFocus`)
+	}
+
+	document.getElementById(`directory`).classList.remove(`keyboardNav`)
+
+	directoryFocusIndex = -1
+}
+
+// Puts the focus on one row, the row that had it before loses it, and the new row is scrolled into view, nothing happens when there is no such row
+function setDirectoryFocus(index) {
+	let target = getDirectoryRows()[index]
+
+	if(!target){
+		return
+	}
+
+	for(let element of document.querySelectorAll(`#directory .kbdFocus`)){
+		element.classList.remove(`kbdFocus`)
+	}
+
+	target.classList.add(`kbdFocus`)
+
+	document.getElementById(`directory`).classList.add(`keyboardNav`)
+
+	directoryFocusIndex = index
+
+	target.scrollIntoView({
+		block : `nearest`,
+		behavior : `smooth`
+	})
+}
+
+// Moves the focus one row down or up and stays on the first or the last row at the ends, the first arrow press goes to the first row when going down and to the last when going up
+function moveDirectoryFocus(step) {
+	let rowCount = getDirectoryRows().length
+
+	if(rowCount == 0){
+		return
+	}
+
+	setDirectoryFocus(directoryFocusIndex == -1 ? (step > 0 ? 0 : rowCount - 1) : Math.min(Math.max(directoryFocusIndex + step, 0), rowCount - 1))
+}
+
+// Enter opens the person of the row that has the focus, and nothing happens while no row has it
+function openDirectoryFocus() {
+	let target = getDirectoryRows()[directoryFocusIndex]
+
+	if(target){
+		viewPerson(target.dataset.personId)
+	}
+}
+
+// The keys of the directory, the arrows move through the rows, Enter opens the row, and Escape gives the focus up
+function handleDirectoryKey(event) {
+	if(event.key == `ArrowDown` || event.key == `ArrowUp`){
+		event.preventDefault()
+
+		moveDirectoryFocus(event.key == `ArrowDown` ? 1 : -1)
+	} else if(event.key == `Enter` && directoryFocusIndex !== -1){
+		event.preventDefault()
+
+		openDirectoryFocus()
+	} else if(event.key == `Escape`){
+		clearDirectoryFocus()
+	}
+}
+
 // Where the pointer was at the last mouse move, the focus of the keyboard is only given up when the pointer really moved, because the page also gets mouse moves when it scrolls or changes under a pointer that is standing still, and those come with the same coordinates
 let lastMouseX = null
 let lastMouseY = null
@@ -712,6 +942,10 @@ document.addEventListener(`mousemove`, (event) => {
 	if(profileFocusIndex !== -1 && hasMoved){
 		clearProfileFocus()
 	}
+
+	if(directoryFocusIndex !== -1 && hasMoved){
+		clearDirectoryFocus()
+	}
 })
 
 function openShortcuts() {
@@ -722,7 +956,7 @@ function closeShortcuts() {
 	document.getElementById(`shortcutsDialog`).close()
 }
 
-// Ctrl or Cmd and S always exports, the browser would otherwise offer to save the page, every other shortcut is a single key and is left alone while typing in a box, while a modifier is held, and while any dialog is open, apart from the keys that close the shortcuts dialog, which is open on its own with nothing typed in it, the single keys are / for the shortcuts, S for the search box, the arrows and E and Enter and Escape for the profile
+// Ctrl or Cmd and S always exports, the browser would otherwise offer to save the page, every other shortcut is a single key and is left alone while typing in a box, while a modifier is held, and while any dialog is open, apart from the keys that close the shortcuts dialog, which is open on its own with nothing typed in it, the single keys are / for the shortcuts, S for the search box, the arrows and E and Enter and Escape for the profile, and while the directory is open the arrows and Enter and Escape are for its rows instead
 document.addEventListener(`keydown`, (event) => {
 	if((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === `s`){
 		event.preventDefault()
@@ -765,6 +999,8 @@ document.addEventListener(`keydown`, (event) => {
 
 		document.getElementById(`search`).focus()
 		document.getElementById(`search`).select()
+	} else if(isDirectoryOpen()){
+		handleDirectoryKey(event)
 	} else if(event.key == `ArrowDown` || event.key == `ArrowUp`){
 		event.preventDefault()
 
@@ -2331,7 +2567,7 @@ function applyImport(data) {
 	viewPerson()
 }
 
-// Dates and names saved in their old forms are turned into lists, a single link of an older version becomes a list of links and the source orders that are not used any more are dropped, the profile picture ids and crops of the time when the page had pictures are dropped, and so are the pictures themselves, which were kept in localStorage and in an IndexedDB database, relations are made safe and the list of plain text relatives is built, and the person on screen before the refresh is shown again, nothing is shown when the history is empty, this is a function because relations.js is read after this file and calls it when it is ready, the first drawing of a person needs the relations
+// Dates and names saved in their old forms are turned into lists, a single link of an older version becomes a list of links and the source orders that are not used any more are dropped, the profile picture ids and crops of the time when the page had pictures are dropped, and so are the pictures themselves, which were kept in localStorage and in an IndexedDB database, relations are made safe and the list of plain text relatives is built, and the person on screen before the refresh is shown again, the directory of all people is shown when the history is empty, this is a function because relations.js is read after this file and calls it when it is ready, the first drawing of a person needs the relations
 function startApp() {
 	Object.values(persons).forEach(migrateDates)
 	Object.values(persons).forEach(migrateNames)

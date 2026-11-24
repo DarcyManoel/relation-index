@@ -12,6 +12,7 @@
 			<div>
 				<div id="back" onclick="goBack()"><div class="pill"><span class="icon"></span><span class="label">back</span></div></div>
 				<div id="recent"></div>
+				<div id="directoryButton" onclick="openDirectory()"><div class="pill"><span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7h11M9 12h11M9 17h11"/><path d="M4 7h.01M4 12h.01M4 17h.01"/></svg></span><span class="label">Directory</span></div></div>
 			</div>
 			<!-- center align -->
 			<div>
@@ -43,6 +44,7 @@
 				<div id="timeline"></div>
 			</div>
 		</div>
+		<div id="directory" hidden></div>
 		<dialog id="nameDialog">
 			<form onsubmit="saveName(event)" oninput="updateNameDialog()" novalidate>
 				<div class="title" id="nameTitle"></div>
