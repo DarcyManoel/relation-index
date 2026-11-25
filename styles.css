@@ -45,9 +45,10 @@ body{
 			display: flex;
 			gap: .5em;
 			>div{
-				backdrop-filter: blur(12px) saturate(.75);
-				background: rgba(200, 200, 200, .3);
+				backdrop-filter: blur(12px);
+				background: rgba(255, 255, 255, .78);
 				border-radius: .75em;
+				box-shadow: 0 .1em .4em rgba(0, 0, 0, .06);
 				cursor: pointer;
 				padding: .5em;
 			}
@@ -79,13 +80,15 @@ body{
 			aspect-ratio: 1;
 			backdrop-filter: none;
 			background: none;
+			box-shadow: none;
 			padding: 0;
 			position: relative;
 			user-select: none;
 			>.pill{
-				backdrop-filter: blur(12px) saturate(.75);
-				background: rgba(200, 200, 200, .3);
+				backdrop-filter: blur(12px);
+				background: rgba(255, 255, 255, .78);
 				border-radius: .75em;
+				box-shadow: 0 .1em .4em rgba(0, 0, 0, .06);
 				display: flex;
 				height: 100%;
 				left: 0;
@@ -117,8 +120,7 @@ body{
 			&:hover{
 				z-index: 2;
 				>.pill{
-					backdrop-filter: blur(16px) saturate(.5);
-					background: rgba(200, 200, 200, .5);
+					background: rgba(255, 255, 255, .95);
 					border-radius: 1em;
 					>.label{
 						opacity: 1;
@@ -179,13 +181,15 @@ body{
 			aspect-ratio: 1;
 			backdrop-filter: none;
 			background: none;
+			box-shadow: none;
 			padding: 0;
 			position: relative;
 			user-select: none;
 			>.pill{
-				backdrop-filter: blur(12px) saturate(.75);
-				background: rgba(200, 200, 200, .3);
+				backdrop-filter: blur(12px);
+				background: rgba(255, 255, 255, .78);
 				border-radius: .75em;
+				box-shadow: 0 .1em .4em rgba(0, 0, 0, .06);
 				display: flex;
 				height: 100%;
 				left: 0;
@@ -217,8 +221,7 @@ body{
 			&:hover{
 				z-index: 2;
 				>.pill{
-					backdrop-filter: blur(16px) saturate(.5);
-					background: rgba(200, 200, 200, .5);
+					background: rgba(255, 255, 255, .95);
 					border-radius: 1em;
 					>.label{
 						opacity: 1;
@@ -232,12 +235,14 @@ body{
 			aspect-ratio: 1;
 			backdrop-filter: none;
 			background: none;
+			box-shadow: none;
 			padding: 0;
 			position: relative;
 			>.pill{
-				backdrop-filter: blur(12px) saturate(.75);
-				background: rgba(200, 200, 200, .3);
+				backdrop-filter: blur(12px);
+				background: rgba(255, 255, 255, .78);
 				border-radius: .75em;
+				box-shadow: 0 .1em .4em rgba(0, 0, 0, .06);
 				display: flex;
 				height: 100%;
 				position: absolute;
@@ -264,8 +269,7 @@ body{
 			}
 			&:hover{
 				>.pill{
-					backdrop-filter: blur(16px) saturate(.5);
-					background: rgba(200, 200, 200, .5);
+					background: rgba(255, 255, 255, .95);
 					border-radius: 1em;
 					>.label{
 						opacity: 1;
@@ -280,6 +284,7 @@ body{
 			aspect-ratio: 1;
 			backdrop-filter: none;
 			background: none;
+			box-shadow: none;
 			padding: 0;
 			position: relative;
 			user-select: none;
@@ -290,9 +295,10 @@ body{
 				}
 			}
 			>.pill{
-				backdrop-filter: blur(12px) saturate(.75);
-				background: rgba(200, 200, 200, .3);
+				backdrop-filter: blur(12px);
+				background: rgba(255, 255, 255, .78);
 				border-radius: .75em;
+				box-shadow: 0 .1em .4em rgba(0, 0, 0, .06);
 				display: flex;
 				height: 100%;
 				position: absolute;
@@ -334,8 +340,7 @@ body{
 			}
 			&:hover{
 				>.pill{
-					backdrop-filter: blur(16px) saturate(.5);
-					background: rgba(200, 200, 200, .5);
+					background: rgba(255, 255, 255, .95);
 					border-radius: 1em;
 					>.label{
 						opacity: 1;
@@ -357,9 +362,10 @@ body{
 			}
 		}
 		#exportNote{
-			backdrop-filter: blur(12px);
-			background: rgba(235, 235, 235, .92);
+			backdrop-filter: blur(14px);
+			background: rgba(255, 255, 255, .92);
 			border-radius: .75em;
+			box-shadow: 0 .25em .8em rgba(0, 0, 0, .08);
 			color: grey;
 			cursor: default;
 			font-size: .7em;
@@ -382,6 +388,7 @@ body{
 		#searchBox{
 			backdrop-filter: none;
 			background: none;
+			box-shadow: none;
 			cursor: default;
 			display: flex;
 			padding: 0;
@@ -393,9 +400,10 @@ body{
 			}
 		}
 		#results{
-			backdrop-filter: blur(12px) saturate(.75);
-			background: rgba(200, 200, 200, .3);
+			backdrop-filter: blur(14px);
+			background: rgba(255, 255, 255, .92);
 			border-radius: .75em;
+			box-shadow: 0 .25em .8em rgba(0, 0, 0, .08);
 			left: 0;
 			max-height: 20em;
 			opacity: 0;
@@ -430,13 +438,13 @@ body{
 				width: 100%;
 				z-index: 2;
 				&.top{
-					background: linear-gradient(to top, transparent, rgba(225, 225, 225, .92));
+					background: linear-gradient(to top, transparent, rgba(255, 255, 255, .96));
 					border-radius: .75em .75em 0 0;
 					margin-bottom: -2em;
 					top: 0;
 				}
 				&.bottom{
-					background: linear-gradient(to bottom, transparent, rgba(225, 225, 225, .92));
+					background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, .96));
 					border-radius: 0 0 .75em .75em;
 					bottom: 0;
 					margin-top: -2em;
@@ -447,7 +455,7 @@ body{
 				}
 			}
 			&:not(.keyboardNav)>.result:hover{
-				background: rgba(200, 200, 200, .5);
+				background: rgba(200, 200, 200, .35);
 				border-radius: 1em;
 			}
 			&:not(.keyboardNav)>.result>.kind.hasPath:hover{
@@ -481,7 +489,7 @@ body{
 				margin: 0 .25em;
 				padding: .25em .5em;
 				&.selected{
-					background: rgba(200, 200, 200, .5);
+					background: rgba(200, 200, 200, .35);
 					border-radius: 1em;
 				}
 				>.text{
@@ -508,16 +516,19 @@ body{
 			}
 		}
 		#search{
-			backdrop-filter: blur(12px) saturate(.75);
-			background: rgba(200, 200, 200, .3);
+			backdrop-filter: blur(12px);
+			background: rgba(255, 255, 255, .78);
 			border: none;
 			border-radius: .75em;
+			box-shadow: 0 .1em .4em rgba(0, 0, 0, .06);
 			padding: .5em 1em;
 			width: 20em;
 		}
+		#search:hover{
+			background: rgba(255, 255, 255, .95);
+		}
 		#search:focus{
-			backdrop-filter: blur(16px) saturate(.5);
-			background: rgba(200, 200, 200, .5);
+			background: rgba(255, 255, 255, .95);
 			border-radius: 1em;
 			width: 30em;
 		}
@@ -1115,10 +1126,11 @@ body{
 		}
 	}
 	dialog{
-		backdrop-filter: blur(16px) saturate(.75);
-		background: rgba(200, 200, 200, .6);
+		backdrop-filter: blur(16px);
+		background: rgba(255, 255, 255, .92);
 		border: none;
 		border-radius: .75em;
+		box-shadow: 0 .5em 1.75em rgba(0, 0, 0, .12);
 		max-height: calc(100dvh - 2em);
 		opacity: 0;
 		overflow-y: auto;
