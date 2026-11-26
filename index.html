@@ -200,6 +200,16 @@
 				</div>
 			</form>
 		</dialog>
+		<dialog id="auditDialog">
+			<form onsubmit="event.preventDefault()">
+				<div class="title">Database audit</div>
+				<div class="choices" id="auditFilters"></div>
+				<div class="auditList" id="auditList"></div>
+				<div class="buttons">
+					<button type="button" onclick="closeAudit()">Close</button>
+				</div>
+			</form>
+		</dialog>
 	</body>
 	<script type="text/javascript"src="scripts.js"></script>
 	<!-- timeline.js is read before relations.js because relations.js starts the app when it is read, and the first drawing of the remembered person already needs the timeline -->

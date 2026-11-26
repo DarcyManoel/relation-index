@@ -45,7 +45,8 @@ let relationsDraft = {
 	},
 	selectedEntryIndex : 0,
 	selectedVariantIndex : 0,
-	addedKeys : new Set()
+	addedKeys : new Set(),
+	confirmedKeys : new Set()
 }
 
 function getBlankRelationVariant() {
@@ -196,7 +197,7 @@ function absorbDuplicateInferences(entry) {
 			continue
 		}
 
-		if(!variant.isQuestioned && carrier.hasInference !== true){
+		if(!variant.isQuestioned && carrier.hasInference !== true && carrier.isConfirmed !== true){
 			carrier.hasInference = true
 			carrier.inferenceId = variant.inferenceId
 			carrier.derivedFrom = variant.derivedFrom
@@ -276,7 +277,7 @@ function syncReciprocalRelation(ownerId, role, targetId) {
 
 		return copy
 	})
-	let autoVariants = targetEntry.variants.filter((variant) => variant.isAutoInferred)
+	let autoVariants = targetEntry.variants.filter((variant) => variant.isAutoInferred && !copies.some((copy) => copy.isConfirmed === true && copy.subtype === variant.subtype))
 	let oldPreferredVariant = targetEntry.variants[targetEntry.preferredVariantIndex]
 	let manualPreferredIndex = manualVariants.indexOf(ownerEntry.variants[ownerEntry.preferredVariantIndex])
 
@@ -325,6 +326,7 @@ function sanitizeRelationVariant(role, variant) {
 		derivedFrom : Array.isArray(variant.derivedFrom) ? variant.derivedFrom.filter((key) => typeof key == `string`) : blankVariant.derivedFrom,
 		isQuestioned : variant.isQuestioned === true,
 		...(variant.isAutoInferred !== true && variant.hasInference === true ? { hasInference : true, inferenceNote : typeof variant.inferenceNote == `string` ? variant.inferenceNote : null } : {}),
+		...(variant.isAutoInferred !== true && variant.isConfirmed === true ? { isConfirmed : true } : {}),
 		...(variant.hasConflict === true ? { hasConflict : true } : {})
 	}
 }
@@ -791,7 +793,7 @@ function reconcileRoleList(person, role, wantedLinks) {
 		let manualCarriers = new Map()
 
 		for(let variant of entry.variants){
-			if(!variant.isAutoInferred && !manualCarriers.has(variant.subtype)){
+			if(!variant.isAutoInferred && (!manualCarriers.has(variant.subtype) || (variant.isConfirmed === true && manualCarriers.get(variant.subtype).isConfirmed !== true))){
 				manualCarriers.set(variant.subtype, variant)
 			}
 		}
@@ -826,7 +828,7 @@ function reconcileRoleList(person, role, wantedLinks) {
 				let wantedForVariant = wantedBySubtype.get(variant.subtype)
 
 				if(wantedForVariant && manualCarriers.get(variant.subtype) === variant){
-					if(variant.hasInference !== true || variant.isQuestioned || variant.inferenceId != wantedForVariant.inferenceId || variant.inferenceNote != wantedForVariant.note || JSON.stringify(variant.derivedFrom) != JSON.stringify(wantedForVariant.derivedFrom)){
+					if(variant.isConfirmed !== true && (variant.hasInference !== true || variant.isQuestioned || variant.inferenceId != wantedForVariant.inferenceId || variant.inferenceNote != wantedForVariant.note || JSON.stringify(variant.derivedFrom) != JSON.stringify(wantedForVariant.derivedFrom))){
 						hasChanged = true
 
 						variant.hasInference = true
@@ -1717,6 +1719,7 @@ function openRelationsDialog(initialRole = `parents`) {
 	relationsDraft.role = initialRole
 	relationsDraft.entries = {}
 	relationsDraft.addedKeys = new Set()
+	relationsDraft.confirmedKeys = new Set()
 
 	for(let role of relationRoles){
 		relationsDraft.entries[role] = JSON.parse(JSON.stringify(person.relations?.[role] ?? [])).filter(isRenderableRelationEntry)
@@ -2349,6 +2352,44 @@ function starRelationsVariant(event, index) {
 	renderRelationsEditor()
 }
 
+// Confirm turns a source that the page worked out, on its own or carried by a typed source, into a typed source that the user has checked, what the page worked out is taken off it, a note that the page wrote is dropped and a note the user wrote stays, and the source gets the star, isConfirmed marks it as checked so the page does not put what it worked out onto it again, the other side gets the same source when the dialog is saved, because every typed source is mirrored, and the link is not recorded as removed, because it is still there
+function confirmRelationsVariant(event, index) {
+	event.stopPropagation()
+	syncRelationsFromForm()
+
+	let entry = getSelectedRelationsEntry()
+	let variant = entry?.variants[index]
+
+	if(!variant || !(variant.isAutoInferred || variant.hasInference === true)){
+		return
+	}
+
+	let hasCustomNote = typeof variant.note == `string` && variant.note != `` && !variant.note.includes(`computationally inferred`)
+
+	variant.isAutoInferred = false
+	variant.isConfirmed = true
+	variant.inferenceId = null
+	variant.derivedFrom = null
+	variant.isQuestioned = false
+
+	delete variant.hasInference
+	delete variant.inferenceNote
+
+	if(!hasCustomNote){
+		variant.note = null
+	}
+
+	entry.preferredVariantIndex = index
+	relationsDraft.selectedVariantIndex = index
+
+	if(entry.personId != null){
+		relationsDraft.confirmedKeys.add(buildBlockedInferenceKey(relationsDraft.role, entry.personId))
+	}
+
+	fillRelationsForm()
+	renderRelationsDialog()
+}
+
 // Any source can be removed, a typed one or one the page worked out, the star and the selection follow their sources, the star falls back to the first source when its own is removed, and an entry with no source left is removed
 function removeRelationsVariant(event, index) {
 	event.stopPropagation()
@@ -2417,7 +2458,7 @@ function renderRelationsEditor() {
 	let isEditable = Boolean(variant) && !variant.isAutoInferred
 
 	variantsElement.innerHTML = !entry ? `` : `<div class="heading"><span>Entered sources \u00b7 ${escapeHtml(getRelationEntryLabel(entry))}</span><span class="action" onclick="addRelationsVariant()">+ add another</span></div>${entry.variants.map((entryVariant, index) => {
-		return `<div class="entry${index == relationsDraft.selectedVariantIndex ? ` selected` : ``}" onclick="selectRelationsVariant(${index})"><span class="star" onclick="starRelationsVariant(event, ${index})">${index == entry.preferredVariantIndex ? `\u2605` : `\u2606`}</span><span class="text">${relationSubtypeLabels[entryVariant.subtype] ?? `Unknown`}${entryVariant.hasConflict ? ` !` : ``}${entryVariant.isQuestioned ? ` ?` : ``}</span><span class="meta">${entryVariant.isAutoInferred || entryVariant.hasInference === true ? `Inferred` : ``}</span><span class="remove" onclick="removeRelationsVariant(event, ${index})">remove</span>${buildRelationVariantExtraHtml(entryVariant)}</div>`
+		return `<div class="entry${index == relationsDraft.selectedVariantIndex ? ` selected` : ``}" onclick="selectRelationsVariant(${index})"><span class="star" onclick="starRelationsVariant(event, ${index})">${index == entry.preferredVariantIndex ? `\u2605` : `\u2606`}</span><span class="text">${relationSubtypeLabels[entryVariant.subtype] ?? `Unknown`}${entryVariant.hasConflict ? ` !` : ``}${entryVariant.isQuestioned ? ` ?` : ``}</span><span class="meta">${entryVariant.isAutoInferred || entryVariant.hasInference === true ? `Inferred<span class="confirm" onclick="confirmRelationsVariant(event, ${index})">Confirm</span>` : ``}</span><span class="remove" onclick="removeRelationsVariant(event, ${index})">remove</span>${buildRelationVariantExtraHtml(entryVariant)}</div>`
 	}).join(``)}`
 
 	document.getElementById(`relationsSubtypeHeading`).textContent = isEditable ? `Kind of link` : ``
@@ -2757,7 +2798,7 @@ function saveRelations(event) {
 				removeReciprocalRelation(activeId, role, existingEntry.personId)
 			}
 
-			if(getUnquestionedInferences(existingEntry).length > (draftEntry ? getUnquestionedInferences(draftEntry).length : 0)){
+			if(!relationsDraft.confirmedKeys.has(buildBlockedInferenceKey(role, existingEntry.personId)) && getUnquestionedInferences(existingEntry).length > (draftEntry ? getUnquestionedInferences(draftEntry).length : 0)){
 				removedInferences.push({
 					role : role,
 					targetId : existingEntry.personId

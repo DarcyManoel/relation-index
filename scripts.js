@@ -842,7 +842,7 @@ function buildDirectoryGroupHtml(group) {
 // The header with the number of people is always there, an empty database gets a message that says how to add the first person
 function renderDirectory() {
 	let personCount = Object.keys(persons).length
-	let headerHtml = `<div class="header"><span class="title">People</span><span class="count">${personCount}</span></div>`
+	let headerHtml = `<div class="header"><span class="summary"><span class="title">People</span><span class="count">${personCount}</span></span><span class="audit" onclick="openAudit()">Audit (${scanDatabaseAudit().length})</span></div>`
 
 	if(personCount == 0){
 		document.getElementById(`directory`).innerHTML = `${headerHtml}<div class="empty">Nobody is here yet, press add to create the first person.</div>`
@@ -851,6 +851,289 @@ function renderDirectory() {
 	}
 
 	document.getElementById(`directory`).innerHTML = `${headerHtml}<div class="groups">${getDirectoryGroups().map(buildDirectoryGroupHtml).join(``)}</div>`
+}
+
+// The database audit looks at every person each time it is asked, so the count in the header of the directory and the list in the dialog are always live and nothing about it is saved, an item is { personId, categoryKey, description, role }, role is only set for an unverified item and is the list of relations that the item is about, so opening the item can go straight to that list in the relations dialog, the categories are in the order of the filter row
+let auditCategories = [
+	{
+		key : `missingBirth`,
+		label : `Missing birth`
+	},
+	{
+		key : `missingDeath`,
+		label : `Missing death`
+	},
+	{
+		key : `unverified`,
+		label : `Unverified`
+	},
+	{
+		key : `dateAnomalies`,
+		label : `Date anomalies`
+	},
+	{
+		key : `duplicates`,
+		label : `Duplicates`
+	}
+]
+let auditMaximumAgeYears = 120
+let auditMinimumParentGapYears = 12
+
+// The filter that is chosen in the dialog, all or the key of one category, and the items that the list shows right now, so a click on a row knows which item it is, both are set whenever the dialog is drawn
+let auditCategoryKey = `all`
+let auditShownItems = []
+
+function buildAuditItem(personId, categoryKey, description, role = null) {
+	return {
+		personId : Number(personId),
+		categoryKey : categoryKey,
+		description : description,
+		role : role
+	}
+}
+
+function getAuditYearsText(yearCount) {
+	return `${yearCount} ${yearCount == 1 ? `year` : `years`}`
+}
+
+// A source of a relation counts as unverified when the page worked it out, on its own or carried by a typed source
+function isAuditInferredVariant(variant) {
+	return variant.isAutoInferred === true || variant.hasInference === true
+}
+
+// Two dates are compared part by part, the year first, and as soon as a part is not known on either side nothing more can be said, so the answer is 0, otherwise it is negative when the first date is earlier
+function compareAuditDates(firstDate, secondDate) {
+	for(let part of [`year`, `month`, `day`]){
+		if(firstDate[part] == null || secondDate[part] == null){
+			return 0
+		}
+
+		if(firstDate[part] != secondDate[part]){
+			return firstDate[part] - secondDate[part]
+		}
+	}
+
+	return 0
+}
+
+function getAuditMissingBirthItems() {
+	return Object.entries(persons)
+		.filter(([personId, person]) => getPreferredDate(person, `birth`)?.year == null)
+		.map(([personId]) => buildAuditItem(personId, `missingBirth`, `No birth year is known.`))
+}
+
+function getAuditMissingDeathItems() {
+	return Object.entries(persons)
+		.filter(([personId, person]) => person.isDeceased === true && getPreferredDate(person, `death`)?.year == null)
+		.map(([personId]) => buildAuditItem(personId, `missingDeath`, `Marked as deceased, but no death year is known.`))
+}
+
+// One item for each list of relations that holds a source the page worked out, it names the people on that list, so the item says what is waiting to be confirmed
+function getAuditUnverifiedItems() {
+	let items = []
+
+	for(let [personId, person] of Object.entries(persons)){
+		for(let role of relationRoles){
+			let inferredLabels = (person.relations?.[role] ?? [])
+				.filter((entry) => isRenderableRelationEntry(entry) && entry.variants.some(isAuditInferredVariant))
+				.map((entry) => getRelationEntryLabel(entry))
+
+			if(inferredLabels.length == 0){
+				continue
+			}
+
+			items.push(buildAuditItem(personId, `unverified`, `Inferred ${relationRoleLabels[role].toLowerCase()} to confirm: ${inferredLabels.join(`, `)}`, role))
+		}
+	}
+
+	return items
+}
+
+// Every pair of a parent and a child that has a biological link in the starred source, from either side, each pair once, the answer is a list of { parentId, childId }
+function getAuditBiologicalPairs() {
+	let pairs = new Map()
+
+	for(let [personId, person] of Object.entries(persons)){
+		for(let role of [`children`, `parents`]){
+			for(let entry of person.relations?.[role] ?? []){
+				let variant = entry.personId == null ? null : getPreferredRelationVariant(entry)
+
+				if(!variant || variant.subtype != `biological` || !persons[entry.personId]){
+					continue
+				}
+
+				let parentId = role == `children` ? Number(personId) : entry.personId
+				let childId = role == `children` ? entry.personId : Number(personId)
+
+				pairs.set(`${parentId}:${childId}`, {
+					parentId : parentId,
+					childId : childId
+				})
+			}
+		}
+	}
+
+	return [...pairs.values()]
+}
+
+// A death before the birth, an age over auditMaximumAgeYears, which for a person with no death that is not marked as deceased is the age today, and a parent who was born after their biological child or less than auditMinimumParentGapYears years before, the parent is the person the last kind is listed on
+function getAuditDateAnomalyItems() {
+	let items = []
+	let currentYear = new Date().getFullYear()
+
+	for(let [personId, person] of Object.entries(persons)){
+		let birth = getPreferredDate(person, `birth`)
+		let death = getPreferredDate(person, `death`)
+
+		if(birth?.year == null){
+			continue
+		}
+
+		if(death?.year != null){
+			if(compareAuditDates(death, birth) < 0){
+				items.push(buildAuditItem(personId, `dateAnomalies`, `Death (${death.year}) is before birth (${birth.year}).`))
+			} else if(death.year - birth.year > auditMaximumAgeYears){
+				items.push(buildAuditItem(personId, `dateAnomalies`, `Age at death would be ${death.year - birth.year}, born ${birth.year} and died ${death.year}.`))
+			}
+		} else if(person.isDeceased !== true && currentYear - birth.year > auditMaximumAgeYears){
+			items.push(buildAuditItem(personId, `dateAnomalies`, `Born ${birth.year} with no death recorded, which makes them ${currentYear - birth.year}.`))
+		}
+	}
+
+	for(let pair of getAuditBiologicalPairs()){
+		let parentBirth = getPreferredDate(persons[pair.parentId], `birth`)
+		let childBirth = getPreferredDate(persons[pair.childId], `birth`)
+
+		if(parentBirth?.year == null || childBirth?.year == null){
+			continue
+		}
+
+		let gapYears = childBirth.year - parentBirth.year
+		let childName = getNameLabel(persons[pair.childId])
+
+		if(gapYears >= auditMinimumParentGapYears){
+			continue
+		}
+
+		if(gapYears < 0){
+			items.push(buildAuditItem(pair.parentId, `dateAnomalies`, `Born ${parentBirth.year}, ${getAuditYearsText(-gapYears)} after their biological child ${childName} (${childBirth.year}).`))
+		} else if(gapYears == 0){
+			items.push(buildAuditItem(pair.parentId, `dateAnomalies`, `Born in ${parentBirth.year}, the same year as their biological child ${childName}.`))
+		} else {
+			items.push(buildAuditItem(pair.parentId, `dateAnomalies`, `Born ${parentBirth.year}, only ${getAuditYearsText(gapYears)} before their biological child ${childName} (${childBirth.year}).`))
+		}
+	}
+
+	return items
+}
+
+// People are the same when the names they are shown with are the same without case, accents and extra spaces, a person with no name at all is never a duplicate
+function getAuditDuplicateItems() {
+	let groups = new Map()
+	let items = []
+
+	for(let [personId, person] of Object.entries(persons)){
+		let preferredName = getPreferredName(person)
+
+		if(!preferredName.firstName && !preferredName.lastName){
+			continue
+		}
+
+		let groupKey = normalizeNameText(getNameLabel(person))
+
+		if(!groups.has(groupKey)){
+			groups.set(groupKey, [])
+		}
+
+		groups.get(groupKey).push(Number(personId))
+	}
+
+	for(let groupIds of groups.values()){
+		if(groupIds.length < 2){
+			continue
+		}
+
+		for(let personId of groupIds){
+			let otherIds = groupIds.filter((groupId) => groupId != personId)
+			let otherLifespans = otherIds.map((otherId) => getDirectoryLifespanText(persons[otherId])).join(`, `)
+
+			items.push(buildAuditItem(personId, `duplicates`, `Same name as ${otherIds.length == 1 ? `another profile` : `${otherIds.length} other profiles`} (${otherLifespans}).`))
+		}
+	}
+
+	return items
+}
+
+function getAuditCategoryIndex(item) {
+	return auditCategories.findIndex((category) => category.key == item.categoryKey)
+}
+
+// Everything that is flagged, in the order of the categories and then of the names, so the list never jumps around between two drawings
+function scanDatabaseAudit() {
+	return [
+		...getAuditMissingBirthItems(),
+		...getAuditMissingDeathItems(),
+		...getAuditUnverifiedItems(),
+		...getAuditDateAnomalyItems(),
+		...getAuditDuplicateItems()
+	].sort((firstItem, secondItem) => getAuditCategoryIndex(firstItem) - getAuditCategoryIndex(secondItem) || getNameLabel(persons[firstItem.personId]).localeCompare(getNameLabel(persons[secondItem.personId])) || firstItem.personId - secondItem.personId)
+}
+
+// One row, the badge is tinted by the starred gender like in the directory, the tag is the category, and clicking the row opens the person
+function buildAuditRowHtml(item, index) {
+	let person = persons[item.personId]
+	let genderValue = getPreferredGender(person)?.value ?? `unknown`
+	let categoryLabel = auditCategories[getAuditCategoryIndex(item)].label
+
+	return `<div class="row" onclick="openAuditItem(${index})"><span class="badge ${escapeHtml(genderValue)}"></span><span class="info"><span class="top"><span class="name">${escapeHtml(getNameLabel(person))}</span><span class="tag">${escapeHtml(categoryLabel)}</span></span><span class="issue">${escapeHtml(item.description)}</span></span></div>`
+}
+
+// The filter pills show how many items each category has, the list shows the items of the chosen one
+function renderAudit() {
+	let items = scanDatabaseAudit()
+	let filters = [{ key : `all`, label : `All` }, ...auditCategories]
+
+	document.getElementById(`auditFilters`).innerHTML = filters
+		.map((filter) => `<div class="choice${filter.key == auditCategoryKey ? ` selected` : ``}" onclick="setAuditCategory('${filter.key}')">${filter.label} ${filter.key == `all` ? items.length : items.filter((item) => item.categoryKey == filter.key).length}</div>`)
+		.join(``)
+
+	auditShownItems = items.filter((item) => auditCategoryKey == `all` || item.categoryKey == auditCategoryKey)
+
+	document.getElementById(`auditList`).innerHTML = auditShownItems.length == 0 ? `<div class="none">Nothing is flagged here.</div>` : auditShownItems.map(buildAuditRowHtml).join(``)
+}
+
+function openAudit() {
+	auditCategoryKey = `all`
+
+	renderAudit()
+
+	document.getElementById(`auditDialog`).showModal()
+}
+
+function closeAudit() {
+	document.getElementById(`auditDialog`).close()
+}
+
+function setAuditCategory(categoryKey) {
+	auditCategoryKey = categoryKey
+
+	renderAudit()
+}
+
+// The dialog closes and the person is opened, an unverified item also opens the relations dialog on its list, so the inferred source can be reviewed and confirmed there
+function openAuditItem(index) {
+	let item = auditShownItems[index]
+
+	if(!item || !persons[item.personId]){
+		return
+	}
+
+	closeAudit()
+	viewPerson(item.personId)
+
+	if(item.role){
+		openRelationsDialog(item.role)
+	}
 }
 
 // The row of the directory that the keyboard is on, counted from the top, and minus one while there is none, the row carries the kbdFocus class, and while the keyboard is on a row the directory has the keyboardNav class, which switches the highlight of the mouse off so only one row is ever highlighted
