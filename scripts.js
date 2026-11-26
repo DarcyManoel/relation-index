@@ -324,6 +324,7 @@ function viewPerson(id = activeHistory.at(-1)) {
 
 		clearRelations()
 		clearTimeline()
+		clearPlaces()
 		openDirectory()
 
 		return
@@ -351,6 +352,7 @@ function viewPerson(id = activeHistory.at(-1)) {
 
 	renderRelations(id)
 	renderTimeline(id)
+	renderPlaces(id)
 
 	if(shouldFocusRelation){
 		focusFirstProfileRelation()
@@ -496,7 +498,9 @@ function updateSearch() {
 
 	let personMatches = findPersonMatches(terms)
 
-	if(personMatches.length == 0){
+	placeSearchMatches = findPlaceMatches(terms)
+
+	if(personMatches.length == 0 && placeSearchMatches.length == 0){
 		resultsElement.innerHTML = `<div class="none">No results found</div>`
 
 		updateSearchScrollCue()
@@ -504,7 +508,7 @@ function updateSearch() {
 		return
 	}
 
-	resultsElement.innerHTML = `<div class="moreCue top">\u2191 more</div><div class="heading">People</div>${personMatches.map((match) => buildSearchResultHtml(match, terms)).join(``)}<div class="moreCue bottom">\u2193 more</div>`
+	resultsElement.innerHTML = `<div class="moreCue top">\u2191 more</div>${personMatches.length > 0 ? `<div class="heading">People</div>${personMatches.map((match) => buildSearchResultHtml(match, terms)).join(``)}` : ``}${placeSearchMatches.length > 0 ? `<div class="heading">Places</div>${placeSearchMatches.map((match, index) => buildPlaceSearchResultHtml(match, index, terms)).join(``)}` : ``}<div class="moreCue bottom">\u2193 more</div>`
 
 	updateSearchScrollCue()
 }
@@ -617,6 +621,18 @@ function getProfileNavTargets() {
 		}
 	}
 
+	let placeEntries = document.querySelectorAll(`#places > .entries > .entry:not(.empty)`)
+
+	if(placeEntries.length > 0){
+		targets.push(...placeEntries)
+	} else {
+		let placesHeading = document.querySelector(`#places > .heading`)
+
+		if(placesHeading){
+			targets.push(placesHeading)
+		}
+	}
+
 	return targets.filter((element) => element.getClientRects().length > 0)
 }
 
@@ -684,13 +700,19 @@ function editProfileFocus(element) {
 			editDeath()
 		}
 	} else {
-		openRelationsDialog(element.closest(`.role`).dataset.role)
+		if(element.closest(`#places`)){
+			openPlacesDialog(Number(element.dataset.placeIndex ?? 0))
+		} else {
+			openRelationsDialog(element.closest(`.role`).dataset.role)
+		}
 	}
 }
 
 // What Enter does on the place that has the focus, an entry with a page opens that page, an entry with no page, which is plain text or the dash of an empty list, opens the relations dialog on its list, and everywhere else it is the same as E
 function openProfileFocus(element) {
-	if(element.matches(`.entry`)){
+	if(element.closest(`#places`) && element.matches(`.entry:not(.empty)`)){
+		element.click()
+	} else if(element.matches(`.entry`)){
 		let linkedName = element.querySelector(`.name.linked`)
 
 		if(linkedName){
@@ -720,6 +742,7 @@ function setDirectoryVisible(isVisible) {
 // Draws the directory and shows it, the history is left alone so the person who was on screen before can still be reached with back, and the history is saved because a deleted person has just been taken out of it
 function openDirectory() {
 	clearProfileFocus()
+	clearPlaces()
 	renderDirectory()
 	setDirectoryVisible(true)
 	updateRecentMenu()
@@ -853,7 +876,7 @@ function renderDirectory() {
 	document.getElementById(`directory`).innerHTML = `${headerHtml}<div class="groups">${getDirectoryGroups().map(buildDirectoryGroupHtml).join(``)}</div>`
 }
 
-// The database audit looks at every person each time it is asked, so the count in the header of the directory and the list in the dialog are always live and nothing about it is saved, an item is { personId, categoryKey, description, role }, role is only set for an unverified item and is the list of relations that the item is about, so opening the item can go straight to that list in the relations dialog, the categories are in the order of the filter row
+// The database audit looks at every person each time it is asked, so the count in the header of the directory and the list in the dialog are always live and nothing about it is saved, an item is { personId, categoryKey, description, role, placeIndex }, role is only set for an unverified item and is the list of relations that the item is about, so opening the item can go straight to that list in the relations dialog, and placeIndex is only set for a place item and is the position of the place in the person, so opening the item can go straight to that place in the places dialog, the categories are in the order of the filter row
 let auditCategories = [
 	{
 		key : `missingBirth`,
@@ -874,6 +897,10 @@ let auditCategories = [
 	{
 		key : `duplicates`,
 		label : `Duplicates`
+	},
+	{
+		key : `places`,
+		label : `Places`
 	}
 ]
 let auditMaximumAgeYears = 120
@@ -883,12 +910,13 @@ let auditMinimumParentGapYears = 12
 let auditCategoryKey = `all`
 let auditShownItems = []
 
-function buildAuditItem(personId, categoryKey, description, role = null) {
+function buildAuditItem(personId, categoryKey, description, role = null, placeIndex = null) {
 	return {
 		personId : Number(personId),
 		categoryKey : categoryKey,
 		description : description,
-		role : role
+		role : role,
+		placeIndex : placeIndex
 	}
 }
 
@@ -1064,6 +1092,34 @@ function getAuditDuplicateItems() {
 	return items
 }
 
+// A place name that is close to another one in the database, such as one that only differs by punctuation or spaces, one that is the start of the other, or one with an abbreviation, one item for each person and each of those place names, it names the places it is close to and how many people use them, and it carries the position of the place in the person, so opening the item goes straight to that place in the places dialog to be standardised
+function getAuditPlaceItems() {
+	let similarPlaces = getSimilarPlaces()
+	let items = []
+
+	for(let [personId, person] of Object.entries(persons)){
+		let seenKeys = new Set()
+
+		for(let [placeIndex, place] of (person.places ?? []).entries()){
+			let placeKey = normalizeNameText(place.name)
+			let closePlaces = similarPlaces.get(placeKey)
+
+			if(!closePlaces || seenKeys.has(placeKey)){
+				continue
+			}
+
+			seenKeys.add(placeKey)
+
+			let closePlaceTexts = closePlaces.slice(0, 3).map((closePlace) => `\u201c${closePlace.name}\u201d (${describeCount(closePlace.personCount, `person`, `people`)})`)
+			let moreText = closePlaces.length > 3 ? ` and ${closePlaces.length - 3} more` : ``
+
+			items.push(buildAuditItem(personId, `places`, `\u201c${place.name}\u201d is close to ${closePlaceTexts.join(`, `)}${moreText}.`, null, placeIndex))
+		}
+	}
+
+	return items
+}
+
 function getAuditCategoryIndex(item) {
 	return auditCategories.findIndex((category) => category.key == item.categoryKey)
 }
@@ -1075,7 +1131,8 @@ function scanDatabaseAudit() {
 		...getAuditMissingDeathItems(),
 		...getAuditUnverifiedItems(),
 		...getAuditDateAnomalyItems(),
-		...getAuditDuplicateItems()
+		...getAuditDuplicateItems(),
+		...getAuditPlaceItems()
 	].sort((firstItem, secondItem) => getAuditCategoryIndex(firstItem) - getAuditCategoryIndex(secondItem) || getNameLabel(persons[firstItem.personId]).localeCompare(getNameLabel(persons[secondItem.personId])) || firstItem.personId - secondItem.personId)
 }
 
@@ -1133,6 +1190,10 @@ function openAuditItem(index) {
 
 	if(item.role){
 		openRelationsDialog(item.role)
+	}
+
+	if(item.placeIndex != null){
+		openPlacesDialog(item.placeIndex)
 	}
 }
 
@@ -2827,6 +2888,7 @@ function applyImport(data) {
 	Object.values(persons).forEach(sanitizeGender)
 	Object.values(persons).forEach(removeLegacyImageData)
 	Object.values(persons).forEach(sanitizeRelations)
+	Object.values(persons).forEach(sanitizePlaces)
 
 	if(typeof rebuildPlainTextRelationIndex == `function`){
 		rebuildPlainTextRelationIndex()
@@ -2857,6 +2919,7 @@ function startApp() {
 	Object.values(persons).forEach(sanitizeGender)
 	Object.values(persons).forEach(removeLegacyImageData)
 	Object.values(persons).forEach(sanitizeRelations)
+	Object.values(persons).forEach(sanitizePlaces)
 	localStorage.removeItem(`images`)
 	indexedDB.deleteDatabase(`relationIndexImages`)
 	rebuildPlainTextRelationIndex()

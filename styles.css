@@ -1002,6 +1002,93 @@ body{
 				}
 			}
 		}
+		#places{
+			background: #ffffff;
+			border-radius: 1em;
+			margin-top: 1em;
+			padding: 1.25em;
+			&:empty{
+				display: none;
+			}
+			&:hover>.heading>.action{
+				opacity: 1;
+			}
+			>.heading{
+				align-items: baseline;
+				cursor: pointer;
+				display: flex;
+				gap: .75em;
+				user-select: none;
+				>span:first-child{
+					font-size: 1.2em;
+					font-weight: bold;
+				}
+				>.action{
+					color: grey;
+					font-size: .8em;
+					opacity: 0;
+				}
+				&.kbdFocus>.action{
+					opacity: 1;
+					>u{
+						text-decoration: underline;
+					}
+				}
+			}
+			>.entries{
+				display: flex;
+				flex-direction: column;
+				gap: .25em;
+				margin-top: .5em;
+				padding-left: 1em;
+				>.entry{
+					align-items: center;
+					cursor: pointer;
+					display: flex;
+					flex-wrap: wrap;
+					gap: .25em .6em;
+					&:hover>.name,
+					&.kbdFocus>.name{
+						text-decoration: underline;
+					}
+					&.empty{
+						color: grey;
+						width: fit-content;
+						&.kbdFocus{
+							text-decoration: underline;
+						}
+					}
+					>.kind{
+						background: rgba(200, 200, 200, .3);
+						border-radius: .75em;
+						color: grey;
+						font-size: .75em;
+						padding: 0 .6em;
+					}
+					>.years{
+						color: grey;
+						font-size: .8em;
+					}
+					>.links{
+						display: flex;
+						flex-wrap: wrap;
+						gap: .25em;
+						>.link{
+							background: rgba(200, 200, 200, .3);
+							border-radius: .75em;
+							color: inherit;
+							font-size: .75em;
+							padding: 0 .6em;
+							text-decoration: none;
+							&:hover{
+								background: rgba(200, 200, 200, .5);
+								border-radius: 1em;
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 	#directory{
 		background: #ffffff;
@@ -1173,6 +1260,8 @@ body{
 		&#addRelationDialog,
 		&#auditDialog,
 		&#importDialog,
+		&#placeConnectionsDialog,
+		&#placesDialog,
 		&#relationsDialog{
 			width: min(32em, calc(100vw - 2em));
 		}
@@ -1507,7 +1596,8 @@ body{
 					}
 				}
 			}
-			>.auditList{
+			>.auditList,
+			>.placePeople{
 				display: flex;
 				flex-direction: column;
 				gap: .25em;
@@ -1594,6 +1684,7 @@ body{
 					}
 				}
 			}
+			>#openAddPlaceButton,
 			>#openAddRelationButton{
 				align-self: flex-start;
 				background: rgba(200, 200, 200, .3);

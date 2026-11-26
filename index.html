@@ -43,6 +43,7 @@
 				<div id="relations"></div>
 				<div id="timeline"></div>
 			</div>
+			<div id="places"></div>
 		</div>
 		<div id="directory" hidden></div>
 		<dialog id="nameDialog">
@@ -200,6 +201,39 @@
 				</div>
 			</form>
 		</dialog>
+		<dialog id="placesDialog">
+			<form onsubmit="savePlaces(event)" oninput="updatePlacesDialog(event)" novalidate>
+				<div class="title">Places</div>
+				<button type="button" id="openAddPlaceButton" onclick="addPlaceEntry()">+ Add Place</button>
+				<div class="list" id="placesEntries"></div>
+				<input id="placeName" type="text" placeholder="Place name" autocomplete="off" onkeydown="handlePlaceNameKey(event)">
+				<div class="list suggestions" id="placeSuggestions"></div>
+				<div class="choices" id="placeKindChoices"></div>
+				<div class="dateInputs" id="placeSingleYear">
+					<label class="year"><span class="name">Year</span><input id="placeYear" type="text" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+				</div>
+				<div class="dateInputs" id="placeYearRange">
+					<label class="first"><span class="name">From year</span><input id="placeFromYear" type="text" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+					<label class="last"><span class="name">To year</span><input id="placeToYear" type="text" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+				</div>
+				<input id="placeNote" type="text" placeholder="Note (optional)" autocomplete="off">
+				<div class="linkInputs" id="placeLinks"></div>
+				<div class="issue" id="placesIssue"></div>
+				<div class="buttons">
+					<button type="button" onclick="closePlaces()">Cancel</button>
+					<button type="submit">Save</button>
+				</div>
+			</form>
+		</dialog>
+		<dialog id="placeConnectionsDialog">
+			<form onsubmit="event.preventDefault()">
+				<div class="title" id="placeConnectionsTitle"></div>
+				<div class="placePeople" id="placePeople"></div>
+				<div class="buttons">
+					<button type="button" onclick="closePlaceConnections()">Close</button>
+				</div>
+			</form>
+		</dialog>
 		<dialog id="auditDialog">
 			<form onsubmit="event.preventDefault()">
 				<div class="title">Database audit</div>
@@ -210,6 +244,7 @@
 				</div>
 			</form>
 		</dialog>
+		<script src="places.js"></script>
 	</body>
 	<script type="text/javascript"src="scripts.js"></script>
 	<!-- timeline.js is read before relations.js because relations.js starts the app when it is read, and the first drawing of the remembered person already needs the timeline -->
