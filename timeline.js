@@ -127,27 +127,24 @@ function clearTimeline() {
 	document.getElementById(`timeline`).innerHTML = ``
 }
 
-// Draws the lifespans of the person and of everyone linked to them directly on one shared axis, oldest birth at the top, nothing is drawn when the person has no links or when nobody has dates that are known well enough, and the bars are not links so clicking them does nothing
-function renderTimeline(personId) {
-	personId = Number(personId)
-
+// The entries of the family timeline, the person and everyone linked to them directly who have dates that are known well enough, the oldest birth first, the answer is an empty list when the person has no links or when nobody has such dates
+function getTimelineFamilyEntries(personId) {
 	let peopleIds = persons[personId] ? getTimelinePeopleIds(personId) : new Map()
 
 	if(peopleIds.size < 2){
-		clearTimeline()
-
-		return
+		return []
 	}
 
-	let entries = [...peopleIds]
+	return [...peopleIds]
 		.map(([entryPersonId, isActive]) => getTimelineEntry(entryPersonId, isActive))
 		.filter((entry) => entry)
 		.sort((firstEntry, secondEntry) => firstEntry.startTime - secondEntry.startTime || firstEntry.personId - secondEntry.personId)
+}
 
+// Draws the lifespans of the person and of everyone linked to them directly on one shared axis, oldest birth at the top, nothing is drawn when the person has no links or when nobody has dates that are known well enough, and the bars are not links so clicking them does nothing
+function buildTimelineFamilyBodyHtml(entries) {
 	if(entries.length < 1){
-		clearTimeline()
-
-		return
+		return ``
 	}
 
 	let minTime = Math.min(...entries.map((entry) => Math.min(entry.startTime, entry.endTime)))
@@ -160,5 +157,190 @@ function renderTimeline(personId) {
 	let rowsHtml = entries.map((entry, index) => buildTimelineRowHtml(entry, getTimelineRowLayout(entry, minTime, maxTime), index)).join(``)
 	let labelsHtml = entries.map((entry, index) => buildTimelineLabelHtml(entry, index)).join(``)
 
-	document.getElementById(`timeline`).innerHTML = `<div class="heading"><span>Timeline</span></div><div class="timelineBody"><div class="chartArea"><div class="gridlines">${buildTimelineGridlinesHtml(minTime, maxTime)}</div><div class="rows">${rowsHtml}</div></div><div class="labelsArea">${labelsHtml}</div></div>`
+	return `<div class="timelineBody"><div class="chartArea"><div class="gridlines">${buildTimelineGridlinesHtml(minTime, maxTime)}</div><div class="rows">${rowsHtml}</div></div><div class="labelsArea">${labelsHtml}</div></div>`
+}
+
+// The age of the person at a date in whole years, a birthday that has not come yet in that year is not counted when the months and days are known, and the answer is null when the date is before the birth
+function getTimelineAge(birth, date) {
+	let age = date.year - birth.year
+
+	if(birth.month != null && date.month != null && (date.month < birth.month || (date.month == birth.month && birth.day != null && date.day != null && date.day < birth.day))){
+		age -= 1
+	}
+
+	return age >= 0 ? age : null
+}
+
+// The dated milestones of the person on screen, oldest first, the birth, the places they lived in or had another connection with that have a year, the births of their children and of their younger siblings and the deaths of their parents and partners that fall in their lifetime, which needs a known birth year, then the death and the places they were buried in, a burial with no year goes right after the death, or at the end when there is no death, each one is { description, isDated, isOwn, sortTime, whenText }, isDated is false for a burial with no year, which has no place on a line of time, isOwn is false for what happened to the family, and the age is the age of the person at that time
+function getTimelineEvents(personId) {
+	let person = persons[personId]
+
+	if(!person){
+		return []
+	}
+
+	let birth = getPreferredDate(person, `birth`)
+	let death = getPreferredDate(person, `death`)
+	let hasBirthYear = birth?.year != null
+	let hasDeathYear = death?.year != null
+	let places = person.places ?? []
+	let events = []
+
+	let addEvent = (date, description, isOwn, shouldShowAge) => {
+		let age = hasBirthYear && shouldShowAge ? getTimelineAge(birth, date) : null
+
+		events.push({
+			description : description,
+			isDated : true,
+			isOwn : isOwn,
+			sortTime : getTimelineYear(date),
+			whenText : age == null ? formatDateText(date) : `${formatDateText(date)} \u00b7 Age ${age}`
+		})
+	}
+	let getPlaceText = (placeKind) => {
+		let place = places.find((candidatePlace) => candidatePlace.kind == placeKind)
+
+		return place ? ` in ${place.name}` : ``
+	}
+
+	if(hasBirthYear){
+		addEvent(birth, `Born${getPlaceText(`born`)}`, true, false)
+	}
+
+	for(let place of places){
+		let placeYear = place.fromYear ?? place.toYear
+
+		if((place.kind != `lived` && place.kind != `other`) || placeYear == null){
+			continue
+		}
+
+		let yearsText = getPlaceYearsText(place, ` \u2013 `)
+		let placeAge = hasBirthYear ? getTimelineAge(birth, { year : placeYear, month : null, day : null }) : null
+
+		events.push({
+			description : `${place.kind == `lived` ? `Lived in` : `Other place:`} ${place.name}`,
+			isDated : true,
+			isOwn : true,
+			sortTime : placeYear,
+			whenText : placeAge == null ? (place.fromYear == null ? `until ${yearsText}` : yearsText) : `${place.fromYear == null ? `until ${yearsText}` : yearsText} \u00b7 Age ${placeAge}`
+		})
+	}
+
+	if(hasBirthYear){
+		let birthTime = getTimelineYear(birth)
+
+		for(let [relationRole, descriptionPrefix, dateKind] of [[`children`, `Birth of child`, `birth`], [`siblings`, `Birth of sibling`, `birth`], [`parents`, `Death of parent`, `death`], [`partners`, `Death of partner`, `death`]]){
+			for(let entry of person.relations?.[relationRole] ?? []){
+				let relative = entry.personId == null ? null : persons[Number(entry.personId)]
+				let relativeDate = relative ? getPreferredDate(relative, dateKind) : null
+
+				if(relativeDate?.year == null || relativeDate.year < birth.year || (hasDeathYear && relativeDate.year > death.year)){
+					continue
+				}
+
+				if(relationRole == `siblings` && getTimelineYear(relativeDate) <= birthTime){
+					continue
+				}
+
+				addEvent(relativeDate, `${descriptionPrefix} ${getNameLabel(relative)}`, false, true)
+			}
+		}
+	}
+
+	if(hasDeathYear){
+		addEvent(death, `Died${getPlaceText(`died`)}`, true, true)
+	}
+
+	let deathTime = hasDeathYear ? getTimelineYear(death) : Infinity
+
+	for(let place of places){
+		if(place.kind != `buried`){
+			continue
+		}
+
+		let placeYear = place.fromYear ?? place.toYear
+
+		if(placeYear == null){
+			events.push({
+				description : `Buried in ${place.name}`,
+				isDated : false,
+				isOwn : true,
+				sortTime : deathTime + .000001,
+				whenText : `Date unknown`
+			})
+		} else {
+			addEvent({ year : placeYear, month : null, day : null }, `Buried in ${place.name}`, true, true)
+		}
+	}
+
+	return events.sort((firstEvent, secondEvent) => firstEvent.sortTime < secondEvent.sortTime ? -1 : firstEvent.sortTime > secondEvent.sortTime ? 1 : 0)
+}
+
+// One milestone, a dot on a vertical line on the left, the date with the age in muted grey and the description, the dot of what happened to the person themselves is darker than the dot of what happened to the family, the row shares its index with its dot on the line of time above, so hovering either one can highlight both
+function buildTimelineEventHtml(event, index) {
+	return `<div class="event${event.isOwn ? ` own` : ``}" data-index="${index}" onmouseenter="highlightLifeEvent(${index}, true)" onmouseleave="highlightLifeEvent(${index}, false)"><div class="marker"><div class="dot"></div><div class="line"></div></div><div class="content"><div class="when">${escapeHtml(event.whenText)}</div><div class="description">${escapeHtml(event.description)}</div></div></div>`
+}
+
+// A row and its dot on the line of time light up together, whichever of the two the mouse is on
+function highlightLifeEvent(index, isHovered) {
+	for(let element of document.querySelectorAll(`#lifeEvents [data-index="${index}"]`)){
+		element.classList.toggle(`hovered`, isHovered)
+	}
+}
+
+// The dot of an event on the line of time, where it goes is the share of the line that the time of the event is at, and the text that shows when the mouse rests on it is the date and the description
+function buildLifeEventDotHtml(event, index, minTime, maxTime) {
+	let leftPercent = roundTimelinePercent(Math.min(Math.max(((event.sortTime - minTime) / (maxTime - minTime)) * 100, 0), 100))
+
+	return `<div class="dot${event.isOwn ? ` own` : ``}" data-index="${index}" title="${escapeHtml(`${event.whenText} \u2013 ${event.description}`)}" style="left: ${leftPercent}%;" onmouseenter="highlightLifeEvent(${index}, true)" onmouseleave="highlightLifeEvent(${index}, false)"></div>`
+}
+
+// The line of time of the person with a dot for each dated event, from the earliest time of the events or the birth at 0% to the latest time of the events or the end of the life at 100%, the bar of the lifespan has the tint of the gender and fades at the right edge when the person is living, a person with no known lifespan has the line and the dots only, and under it the list of every event, an event with no year is only in the list
+function buildLifeEventsBodyHtml(personId, events) {
+	let entry = getTimelineEntry(personId, true)
+	let datedTimes = events.filter((event) => event.isDated).map((event) => event.sortTime)
+	let minTime = Math.min(...datedTimes, ...(entry ? [entry.startTime] : []))
+	let maxTime = Math.max(...datedTimes, ...(entry ? [entry.endTime] : []))
+
+	if(maxTime <= minTime){
+		maxTime = minTime + 1
+	}
+
+	let layout = entry ? getTimelineRowLayout(entry, minTime, maxTime) : null
+	let barHtml = entry ? `<div class="bar ${escapeHtml(entry.genderValue)}${entry.isLiving ? ` living` : ``}" style="left: ${layout.leftPercent}%; width: ${layout.widthPercent}%;"></div>` : ``
+	let dotsHtml = events.map((event, index) => event.isDated ? buildLifeEventDotHtml(event, index, minTime, maxTime) : ``).join(``)
+
+	return `<div class="lifeEventsBody"><div class="track">${barHtml}${dotsHtml}</div><div class="events">${events.map(buildTimelineEventHtml).join(``)}</div></div>`
+}
+
+// Draws the family timeline of the person on screen in its own island, and nothing when there is nothing to draw
+function renderTimeline(personId) {
+	let familyEntries = getTimelineFamilyEntries(Number(personId))
+
+	if(familyEntries.length < 1){
+		clearTimeline()
+
+		return
+	}
+
+	document.getElementById(`timeline`).innerHTML = `<div class="heading"><span>Family timeline</span></div>${buildTimelineFamilyBodyHtml(familyEntries)}`
+}
+
+function clearLifeEvents() {
+	document.getElementById(`lifeEvents`).innerHTML = ``
+}
+
+// Draws the life events of the person on screen in their own island under the relations and the family timeline, the two islands are independent and both can be on screen, nothing is drawn when the person has no event with a year
+function renderLifeEvents(personId) {
+	personId = Number(personId)
+
+	let events = getTimelineEvents(personId)
+
+	if(!events.some((event) => event.isDated)){
+		clearLifeEvents()
+
+		return
+	}
+
+	document.getElementById(`lifeEvents`).innerHTML = `<div class="heading"><span>Life events</span></div>${buildLifeEventsBodyHtml(personId, events)}`
 }

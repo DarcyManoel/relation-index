@@ -324,6 +324,7 @@ function viewPerson(id = activeHistory.at(-1)) {
 
 		clearRelations()
 		clearTimeline()
+		clearLifeEvents()
 		clearPlaces()
 		openDirectory()
 
@@ -352,6 +353,7 @@ function viewPerson(id = activeHistory.at(-1)) {
 
 	renderRelations(id)
 	renderTimeline(id)
+	renderLifeEvents(id)
 	renderPlaces(id)
 
 	if(shouldFocusRelation){
@@ -742,6 +744,8 @@ function setDirectoryVisible(isVisible) {
 // Draws the directory and shows it, the history is left alone so the person who was on screen before can still be reached with back, and the history is saved because a deleted person has just been taken out of it
 function openDirectory() {
 	clearProfileFocus()
+	clearTimeline()
+	clearLifeEvents()
 	clearPlaces()
 	renderDirectory()
 	setDirectoryVisible(true)
