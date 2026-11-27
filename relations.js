@@ -173,6 +173,14 @@ function getUnquestionedInferences(entry) {
 function copyVariantWithoutInference(variant) {
 	let copy = { ...variant, links : [...(variant.links ?? [])] }
 
+	if(variant.date){
+		copy.date = { ...variant.date }
+	}
+
+	if(variant.endDate){
+		copy.endDate = { ...variant.endDate }
+	}
+
 	delete copy.hasInference
 	delete copy.inferenceNote
 
@@ -218,7 +226,7 @@ function absorbDuplicateInferences(entry) {
 function buildRelationVariantExtraHtml(variant) {
 	return buildVariantExtraHtml({
 		...variant,
-		note : [variant.note, variant.hasInference === true ? variant.inferenceNote : null].filter((part) => part).join(` \u00b7 `) || null
+		note : [getPartnerDatesText(variant), variant.note, variant.hasInference === true ? variant.inferenceNote : null].filter((part) => part).join(` \u00b7 `) || null
 	})
 }
 
@@ -313,12 +321,149 @@ function removeReciprocalRelation(ownerId, role, targetId) {
 	cleanupRelations(target)
 }
 
+// A date that a partner link can have, the marriage or union, and the end of it when the pair have separated, it is a partial date like a birth, { year, month, day }, any part may be unknown, a day needs a month and has to exist in that month, and the answer is null when nothing is known, so a link with no dates has no date property at all
+function sanitizePartnerDate(date) {
+	if(!isPlainObject(date)){
+		return null
+	}
+
+	let year = Number.isInteger(date.year) && date.year >= 0 && date.year <= 9999 ? date.year : null
+	let month = Number.isInteger(date.month) && date.month >= 1 && date.month <= 12 ? date.month : null
+	let day = month != null && Number.isInteger(date.day) && date.day >= 1 && date.day <= getDaysInMonth(year ?? 2000, month) ? date.day : null
+
+	if(year == null && month == null){
+		return null
+	}
+
+	return {
+		year : year,
+		month : month,
+		day : day
+	}
+}
+
+// The years of a partner link as the profile shows them, the year of the marriage or union, or the span of years when the pair have separated, a year that is not known is a question mark, and the answer is an empty text when there is no year at all
+function getPartnerYearsText(variant) {
+	let startYear = variant?.date?.year ?? null
+	let endYear = variant?.subtype == `separated` ? variant?.endDate?.year ?? null : null
+
+	if(startYear == null && endYear == null){
+		return ``
+	}
+
+	return endYear == null ? `${startYear}` : `${startYear ?? `?`}\u2013${endYear}`
+}
+
+// The dates of a partner link written out in full for the dialog, Married or Since for the first one and Separated for the second, an empty text when there are none
+function getPartnerDatesText(variant) {
+	let startText = variant.date ? `${variant.subtype == `married` ? `Married` : `Since`} ${formatDateText(variant.date)}` : ``
+	let endText = variant.subtype == `separated` && variant.endDate ? `Separated ${formatDateText(variant.endDate)}` : ``
+
+	return [startText, endText].filter((part) => part != ``).join(` \u00b7 `)
+}
+
+// The boxes of the dates as the text that was typed, kept for each source of the dialog, so a date that is half typed or not valid is not lost when another source is selected, the dates on the source itself only change when what is typed is valid
+let relationsDateInputs = new WeakMap()
+
+function getPartnerDateInputTexts(variant, dateKey) {
+	let typedTexts = relationsDateInputs.get(variant)?.[dateKey]
+
+	if(typedTexts){
+		return typedTexts
+	}
+
+	let date = variant[dateKey]
+
+	return {
+		day : date?.day == null ? `` : `${date.day}`,
+		month : date?.month == null ? `` : `${date.month}`,
+		year : date?.year == null ? `` : `${date.year}`.padStart(4, `0`)
+	}
+}
+
+// What is wrong with the dates typed for a partner source, as one text with the name of the date in front, or an empty text, the rules are the ones of the birth and death dates, and the second date is only checked for a source that has separated
+function getPartnerDatesIssue(variant) {
+	for(let [dateKey, label] of [[`date`, variant.subtype == `married` ? `Married` : `Since`], [`endDate`, `Separated`]]){
+		if(dateKey == `endDate` && variant.subtype != `separated`){
+			continue
+		}
+
+		let typedTexts = getPartnerDateInputTexts(variant, dateKey)
+		let issue = getDateIssue(typedTexts.day, typedTexts.month, typedTexts.year)
+
+		if(issue != ``){
+			return `${label}: ${issue}`
+		}
+	}
+
+	return ``
+}
+
+// Writes the boxes of the dates into the selected partner source, the typed text is always kept, and a date is only written to the source when it is valid, an empty date takes the date off, and a source that has not separated has no second date
+function syncPartnerDatesFromForm(variant) {
+	let typedInputs = {}
+
+	for(let [dateKey, prefix] of [[`date`, `relationsDate`], [`endDate`, `relationsEndDate`]]){
+		typedInputs[dateKey] = {
+			day : document.getElementById(`${prefix}Day`).value.trim(),
+			month : document.getElementById(`${prefix}Month`).value.trim(),
+			year : document.getElementById(`${prefix}Year`).value.trim()
+		}
+	}
+
+	relationsDateInputs.set(variant, typedInputs)
+
+	for(let dateKey of [`date`, `endDate`]){
+		let typedTexts = typedInputs[dateKey]
+
+		if(dateKey == `endDate` && variant.subtype != `separated`){
+			delete variant.endDate
+
+			continue
+		}
+
+		if(getDateIssue(typedTexts.day, typedTexts.month, typedTexts.year) != ``){
+			continue
+		}
+
+		let date = sanitizePartnerDate({
+			year : typedTexts.year == `` ? null : Number(typedTexts.year),
+			month : typedTexts.month == `` ? null : Number(typedTexts.month),
+			day : typedTexts.day == `` ? null : Number(typedTexts.day)
+		})
+
+		if(date){
+			variant[dateKey] = date
+		} else {
+			delete variant[dateKey]
+		}
+	}
+}
+
+// Fills the boxes of the dates from the selected source, a source with no dates empties them
+function fillPartnerDatesForm(variant) {
+	for(let [dateKey, prefix] of [[`date`, `relationsDate`], [`endDate`, `relationsEndDate`]]){
+		let typedTexts = variant ? getPartnerDateInputTexts(variant, dateKey) : {
+			day : ``,
+			month : ``,
+			year : ``
+		}
+
+		document.getElementById(`${prefix}Day`).value = typedTexts.day
+		document.getElementById(`${prefix}Month`).value = typedTexts.month
+		document.getElementById(`${prefix}Year`).value = typedTexts.year
+	}
+}
+
 // What a person written into a file by hand or by an older version may hold is made safe, entries of people that no longer exist are dropped, a person is only linked once under one role, every source gets all its parts, a single link of an older version becomes a list of links, and a subtype that the role does not have becomes unknown
 function sanitizeRelationVariant(role, variant) {
 	let blankVariant = getBlankRelationVariant()
+	let subtype = relationSubtypes[role].includes(variant.subtype) ? variant.subtype : `unknown`
+	let date = role == `partners` ? sanitizePartnerDate(variant.date) : null
+	let endDate = role == `partners` && subtype == `separated` ? sanitizePartnerDate(variant.endDate) : null
 
 	return {
-		subtype : relationSubtypes[role].includes(variant.subtype) ? variant.subtype : `unknown`,
+		subtype : subtype,
 		links : sanitizeLinks(variant),
 		note : typeof variant.note == `string` && variant.note != `` ? variant.note : null,
 		isAutoInferred : variant.isAutoInferred === true,
@@ -327,6 +472,8 @@ function sanitizeRelationVariant(role, variant) {
 		isQuestioned : variant.isQuestioned === true,
 		...(variant.isAutoInferred !== true && variant.hasInference === true ? { hasInference : true, inferenceNote : typeof variant.inferenceNote == `string` ? variant.inferenceNote : null } : {}),
 		...(variant.isAutoInferred !== true && variant.isConfirmed === true ? { isConfirmed : true } : {}),
+		...(date ? { date : date } : {}),
+		...(endDate ? { endDate : endDate } : {}),
 		...(variant.hasConflict === true ? { hasConflict : true } : {})
 	}
 }
@@ -1480,7 +1627,7 @@ function buildRelationEntryHtml(ownerId, role, entry) {
 	let birthYear = person ? getPreferredDate(person, `birth`)?.year : null
 	let hasConflict = entry.variants.some((entryVariant) => entryVariant.hasConflict)
 	let isQuestioned = entry.variants.some((entryVariant) => entryVariant.isQuestioned)
-	let metaText = [isPlainText ? `Plain text` : birthYear ?? ``, variant ? relationSubtypeLabels[variant.subtype] ?? `` : ``].filter((part) => part !== ``).join(` \u00b7 `)
+	let metaText = [isPlainText ? `Plain text` : birthYear ?? ``, variant ? relationSubtypeLabels[variant.subtype] ?? `` : ``, role == `partners` && variant ? getPartnerYearsText(variant) : ``].filter((part) => part !== ``).join(` \u00b7 `)
 	let warningHtml = `${hasConflict ? `<span class="warning" title="This kind of link disagrees with the parents entered">!</span>` : ``}${isQuestioned ? `<span class="warning" title="The parents this was worked out from have changed">?</span>` : ``}`
 
 	return `<div class="entry"><div class="badge ${role} ${genderValue}${isPlainText ? ` plain` : ``}"></div><div class="info"><div class="name${isPlainText ? `` : ` linked`}"${isPlainText ? `` : ` onclick="viewPerson(${entry.personId})"`}><span class="text">${escapeHtml(getRelationEntryLabel(entry))}</span>${warningHtml}${isPlainText ? `<span class="promote" onclick="promoteTextRelation(${ownerId}, ${escapeHtml(JSON.stringify(role))}, ${escapeHtml(JSON.stringify(entry.text))})">create profile</span>` : ``}</div><div class="meta">${escapeHtml(metaText)}</div></div></div>`
@@ -1761,6 +1908,10 @@ function syncRelationsFromForm() {
 
 	variant.note = note == `` ? null : note
 	variant.links = readDynamicLinks(`relationsLinks`)
+
+	if(relationsDraft.role == `partners`){
+		syncPartnerDatesFromForm(variant)
+	}
 }
 
 // The boxes always show the selected source, they are only filled when the selection changes so typing is never interrupted, the links are drawn with the rest of the editor
@@ -1769,6 +1920,8 @@ function fillRelationsForm() {
 
 	document.getElementById(`relationsNote`).value = variant?.note ?? ``
 	document.getElementById(`relationsCoParentSearch`).value = ``
+
+	fillPartnerDatesForm(variant)
 }
 
 function renderRelationsDialog() {
@@ -2432,6 +2585,18 @@ function chooseRelationSubtype(index) {
 
 	variant.subtype = relationSubtypes[relationsDraft.role][index]
 
+	if(variant.subtype != `separated`){
+		delete variant.endDate
+
+		let typedInputs = relationsDateInputs.get(variant)
+
+		if(typedInputs){
+			delete typedInputs.endDate
+		}
+
+		fillPartnerDatesForm(variant)
+	}
+
 	renderRelationsEntries()
 	renderRelationsEditor()
 }
@@ -2466,6 +2631,14 @@ function renderRelationsEditor() {
 		.map((subtype, index) => `<div class="choice${subtype === variant.subtype ? ` selected` : ``}" onclick="chooseRelationSubtype(${index})">${relationSubtypeLabels[subtype]}</div>`)
 		.join(``)
 
+	let isPartnerEditable = isEditable && role == `partners`
+	let isSeparated = isPartnerEditable && variant.subtype == `separated`
+	let datesIssue = isPartnerEditable ? getPartnerDatesIssue(variant) : ``
+
+	document.getElementById(`relationsPartnerDates`).hidden = !isPartnerEditable
+	document.getElementById(`relationsDateHeading`).textContent = variant?.subtype == `married` ? `Married` : `Since`
+	document.getElementById(`relationsEndDateHeading`).hidden = !isSeparated
+	document.getElementById(`relationsEndDateInputs`).hidden = !isSeparated
 	document.getElementById(`relationsNote`).hidden = !isEditable
 	document.getElementById(`relationsLinks`).hidden = !isEditable
 
@@ -2490,8 +2663,12 @@ function renderRelationsEditor() {
 		noticeParts.push(`The parents this was worked out from have changed, check that it still holds.`)
 	}
 
+	if(datesIssue != ``){
+		noticeParts.push(datesIssue)
+	}
+
 	noticeElement.textContent = noticeParts.join(` `)
-	noticeElement.className = variant?.hasConflict || variant?.isQuestioned ? `notice warning` : `notice`
+	noticeElement.className = variant?.hasConflict || variant?.isQuestioned || datesIssue != `` ? `notice warning` : `notice`
 
 	renderCoParentField()
 }
@@ -2779,6 +2956,24 @@ function saveRelations(event) {
 
 	if(!person){
 		return
+	}
+
+	// A partner source with a date that is not valid is selected and the dialog stays open, the notice under the boxes says what is wrong with it
+	for(let [entryIndex, entry] of relationsDraft.entries.partners.entries()){
+		for(let [variantIndex, variant] of entry.variants.entries()){
+			if(variant.isAutoInferred || getPartnerDatesIssue(variant) == ``){
+				continue
+			}
+
+			relationsDraft.role = `partners`
+			relationsDraft.selectedEntryIndex = entryIndex
+			relationsDraft.selectedVariantIndex = variantIndex
+
+			fillRelationsForm()
+			renderRelationsDialog()
+
+			return
+		}
 	}
 
 	let touchedIds = new Set([activeId, ...materializePendingPeople()])

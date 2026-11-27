@@ -171,7 +171,7 @@ function getTimelineAge(birth, date) {
 	return age >= 0 ? age : null
 }
 
-// The dated milestones of the person on screen, oldest first, the birth, the places they lived in or had another connection with that have a year, the births of their children and of their younger siblings and the deaths of their parents and partners that fall in their lifetime, which needs a known birth year, then the death and the places they were buried in, a burial with no year goes right after the death, or at the end when there is no death, each one is { description, isDated, isOwn, sortTime, whenText }, isDated is false for a burial with no year, which has no place on a line of time, isOwn is false for what happened to the family, and the age is the age of the person at that time
+// The dated milestones of the person on screen, oldest first, the birth, the places they lived in or had another connection with that have a year, the births of their children and of their younger siblings and the deaths of their parents and partners that fall in their lifetime, which needs a known birth year, then the marriage or union and the separation of each partner link that has a year of its own, then the death and the places they were buried in, a burial with no year goes right after the death, or at the end when there is no death, each one is { description, isDated, isOwn, sortTime, whenText }, isDated is false for a burial with no year, which has no place on a line of time, isOwn is false for what happened to the family, and the age is the age of the person at that time
 function getTimelineEvents(personId) {
 	let person = persons[personId]
 
@@ -244,6 +244,24 @@ function getTimelineEvents(personId) {
 
 				addEvent(relativeDate, `${descriptionPrefix} ${getNameLabel(relative)}`, false, true)
 			}
+		}
+	}
+
+	for(let entry of person.relations?.partners ?? []){
+		let variant = isRenderableRelationEntry(entry) ? getPreferredRelationVariant(entry) : null
+
+		if(!variant){
+			continue
+		}
+
+		let partnerName = getRelationEntryLabel(entry)
+
+		if(variant.date?.year != null){
+			addEvent(variant.date, `${variant.subtype == `married` ? `Married` : `Partnered with`} ${partnerName}`, true, true)
+		}
+
+		if(variant.subtype == `separated` && variant.endDate?.year != null){
+			addEvent(variant.endDate, `Separated from ${partnerName}`, true, true)
 		}
 	}
 

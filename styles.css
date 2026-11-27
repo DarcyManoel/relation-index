@@ -1848,6 +1848,24 @@ body{
 					border-radius: 1em;
 				}
 			}
+			>.partnerDates{
+				display: flex;
+				flex-direction: column;
+				gap: .5em;
+				&[hidden]{
+					display: none;
+				}
+				>.heading{
+					color: grey;
+					font-size: .8em;
+					letter-spacing: .1em;
+					text-transform: uppercase;
+					user-select: none;
+					&[hidden]{
+						display: none;
+					}
+				}
+			}
 			>.coParentEditor{
 				display: flex;
 				flex-direction: column;
@@ -1949,9 +1967,13 @@ body{
 			>.dateInputs,
 			>.nameInputs,
 			.newPersonFields>.dateInputs,
-			.newPersonFields>.nameInputs{
+			.newPersonFields>.nameInputs,
+			.partnerDates>.dateInputs{
 				display: flex;
 				gap: .5em;
+				&[hidden]{
+					display: none;
+				}
 				>label{
 					display: flex;
 					flex-direction: column;

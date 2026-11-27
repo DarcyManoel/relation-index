@@ -1056,6 +1056,61 @@ function getAuditDateAnomalyItems() {
 		}
 	}
 
+	// The marriage or union date and the separation date of a partner link, each pair once, on the first of the two people, a date before the birth or after the death of either partner is flagged, and so is a separation that is before the marriage or union, a partner written as plain text has no birth or death to check
+	let seenPartnerKeys = new Set()
+
+	for(let [personId, person] of Object.entries(persons)){
+		for(let entry of person.relations?.partners ?? []){
+			if(!isRenderableRelationEntry(entry)){
+				continue
+			}
+
+			let pairKey = entry.personId == null ? `${personId}:${entry.text}` : [Number(personId), Number(entry.personId)].sort((firstId, secondId) => firstId - secondId).join(`:`)
+
+			if(seenPartnerKeys.has(pairKey)){
+				continue
+			}
+
+			seenPartnerKeys.add(pairKey)
+
+			let partnerName = getRelationEntryLabel(entry)
+			let subjects = entry.personId == null ? [person] : [person, persons[entry.personId]]
+
+			for(let variant of entry.variants){
+				let startLabel = variant.subtype == `married` ? `Marriage to` : `Union with`
+				let datedEvents = [
+					{
+						label : startLabel,
+						date : variant.date
+					},
+					{
+						label : `Separation from`,
+						date : variant.subtype == `separated` ? variant.endDate : null
+					}
+				].filter((datedEvent) => datedEvent.date?.year != null)
+
+				for(let datedEvent of datedEvents){
+					for(let subject of subjects){
+						let subjectBirthYear = getPreferredDate(subject, `birth`)?.year
+						let subjectDeathYear = getPreferredDate(subject, `death`)?.year
+
+						if(subjectBirthYear != null && datedEvent.date.year < subjectBirthYear){
+							items.push(buildAuditItem(personId, `dateAnomalies`, `${datedEvent.label} ${partnerName} (${datedEvent.date.year}) is before ${getNameLabel(subject)}\u2019s birth (${subjectBirthYear}).`))
+						}
+
+						if(subjectDeathYear != null && datedEvent.date.year > subjectDeathYear){
+							items.push(buildAuditItem(personId, `dateAnomalies`, `${datedEvent.label} ${partnerName} (${datedEvent.date.year}) is after ${getNameLabel(subject)}\u2019s death (${subjectDeathYear}).`))
+						}
+					}
+				}
+
+				if(variant.subtype == `separated` && variant.date && variant.endDate && compareAuditDates(variant.endDate, variant.date) < 0){
+					items.push(buildAuditItem(personId, `dateAnomalies`, `Separation from ${partnerName} (${formatDateText(variant.endDate)}) is before the marriage or union (${formatDateText(variant.date)}).`))
+				}
+			}
+		}
+	}
+
 	return items
 }
 
