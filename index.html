@@ -190,6 +190,7 @@
 					<div class="row"><span class="keys"><kbd>&uarr;</kbd><kbd>&darr;</kbd></span><span class="label">Navigation</span></div>
 					<div class="row"><span class="keys"><kbd>E</kbd></span><span class="label">Edit selected field</span></div>
 					<div class="row"><span class="keys"><kbd>Enter</kbd></span><span class="label">Open selected item</span></div>
+					<div class="row"><span class="keys"><kbd>Space</kbd><span class="plus">/</span><kbd>*</kbd></span><span class="label">Toggle selected event significance</span></div>
 					<div class="row"><span class="keys"><kbd>Ctrl / Cmd</kbd><span class="plus">+</span><kbd>S</kbd></span><span class="label">Export database</span></div>
 					<div class="row"><span class="keys"><kbd>/</kbd></span><span class="label">Toggle keybinds</span></div>
 				</div>
@@ -217,6 +218,38 @@
 				<div class="chain" id="kinshipChain"></div>
 				<div class="buttons">
 					<button type="button" onclick="closeKinshipDialog()">Close</button>
+				</div>
+			</form>
+		</dialog>
+		<dialog id="lifeEventDialog">
+			<form onsubmit="saveLifeEvent(event)" oninput="updateLifeEventDialog()" novalidate>
+				<div class="title" id="lifeEventDialogTitle"></div>
+				<input id="lifeEventStartTitle" type="text" placeholder="Event title (required)" autocomplete="off">
+				<div class="lifeEventDates">
+					<div class="heading">Date (required)</div>
+					<div class="dateInputs">
+						<label class="day"><span class="name">Day</span><input id="lifeEventStartDay" type="text" inputmode="numeric" maxlength="2" autocomplete="off"></label>
+						<label class="month"><span class="name">Month</span><input id="lifeEventStartMonth" type="text" inputmode="numeric" maxlength="2" autocomplete="off"></label>
+						<label class="year"><span class="name">Year</span><input id="lifeEventStartYear" type="text" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+					</div>
+				</div>
+				<div class="choices" id="lifeEventSignificanceChoices"></div>
+				<div class="lifeEventDates">
+					<div class="heading">End date (optional)</div>
+					<div class="dateInputs">
+						<label class="day"><span class="name">Day</span><input id="lifeEventEndDay" type="text" inputmode="numeric" maxlength="2" autocomplete="off"></label>
+						<label class="month"><span class="name">Month</span><input id="lifeEventEndMonth" type="text" inputmode="numeric" maxlength="2" autocomplete="off"></label>
+						<label class="year"><span class="name">Year</span><input id="lifeEventEndYear" type="text" inputmode="numeric" maxlength="4" autocomplete="off"></label>
+					</div>
+				</div>
+				<input id="lifeEventEndTitle" type="text" placeholder="End event title (required)" autocomplete="off" hidden>
+				<textarea id="lifeEventNote" placeholder="Note (optional)" rows="3" autocomplete="off"></textarea>
+				<div class="linkInputs" id="lifeEventLinks"></div>
+				<div class="issue" id="lifeEventIssue"></div>
+				<div class="buttons">
+					<button type="button" class="delete" id="lifeEventDelete" onclick="deleteLifeEvent()">Delete</button>
+					<button type="button" onclick="closeLifeEventDialog()">Cancel</button>
+					<button type="submit">Save</button>
 				</div>
 			</form>
 		</dialog>

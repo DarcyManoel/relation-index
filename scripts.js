@@ -635,6 +635,13 @@ function getProfileNavTargets() {
 		}
 	}
 
+	// The life events come after the places, so Down from the end of the left column goes into the right column, first the Add Event heading and then every event that is shown, which depends on the filter, and Up from the heading goes back to the end of the left column
+	let lifeEventsHeading = document.querySelector(`#lifeEvents > .header > .heading`)
+
+	if(lifeEventsHeading){
+		targets.push(lifeEventsHeading, ...document.querySelectorAll(`#lifeEvents .events > .event`))
+	}
+
 	return targets.filter((element) => element.getClientRects().length > 0)
 }
 
@@ -659,6 +666,15 @@ function setProfileFocus(index) {
 	}
 
 	target.classList.add(`kbdFocus`)
+
+	// The keyboard and the mouse never highlight an event at the same time, so what the mouse had lit in the life events goes out, and the dot of the event on the line of time lights up with its row
+	for(let element of document.querySelectorAll(`#lifeEvents .hovered`)){
+		element.classList.remove(`hovered`)
+	}
+
+	if(target.matches(`#lifeEvents .event`)){
+		document.querySelector(`#lifeEvents .track > .dot[data-index="${target.dataset.index}"]`)?.classList.add(`kbdFocus`)
+	}
 
 	profileFocusIndex = index
 
@@ -702,7 +718,9 @@ function editProfileFocus(element) {
 			editDeath()
 		}
 	} else {
-		if(element.closest(`#places`)){
+		if(element.closest(`#lifeEvents`)){
+			editLifeEventFocus(element)
+		} else if(element.closest(`#places`)){
 			openPlacesDialog(Number(element.dataset.placeIndex ?? 0))
 		} else {
 			openRelationsDialog(element.closest(`.role`).dataset.role)
@@ -712,7 +730,9 @@ function editProfileFocus(element) {
 
 // What Enter does on the place that has the focus, an entry with a page opens that page, an entry with no page, which is plain text or the dash of an empty list, opens the relations dialog on its list, and everywhere else it is the same as E
 function openProfileFocus(element) {
-	if(element.closest(`#places`) && element.matches(`.entry:not(.empty)`)){
+	if(element.closest(`#lifeEvents`)){
+		openLifeEventFocus(element)
+	} else if(element.closest(`#places`) && element.matches(`.entry:not(.empty)`)){
 		element.click()
 	} else if(element.matches(`.entry`)){
 		let linkedName = element.querySelector(`.name.linked`)
@@ -1056,6 +1076,34 @@ function getAuditDateAnomalyItems() {
 		}
 	}
 
+	// The custom events of every person, the start and the end of an event that has both, a year before the birth or after the death of the person is flagged, and so is an end that is before the start
+	for(let [personId, person] of Object.entries(persons)){
+		let customBirthYear = getPreferredDate(person, `birth`)?.year
+		let customDeathYear = getPreferredDate(person, `death`)?.year
+
+		for(let customEvent of person.customEvents ?? []){
+			let datedParts = [[customEvent.title, customEvent.date]]
+
+			if(customEvent.endDate){
+				datedParts.push([customEvent.endTitle, customEvent.endDate])
+			}
+
+			for(let [partTitle, partDate] of datedParts){
+				if(customBirthYear != null && partDate.year < customBirthYear){
+					items.push(buildAuditItem(personId, `dateAnomalies`, `Event \u201c${partTitle}\u201d (${partDate.year}) is before birth (${customBirthYear}).`))
+				}
+
+				if(customDeathYear != null && partDate.year > customDeathYear){
+					items.push(buildAuditItem(personId, `dateAnomalies`, `Event \u201c${partTitle}\u201d (${partDate.year}) is after death (${customDeathYear}).`))
+				}
+			}
+
+			if(customEvent.endDate && compareAuditDates(customEvent.endDate, customEvent.date) < 0){
+				items.push(buildAuditItem(personId, `dateAnomalies`, `The end of \u201c${customEvent.title}\u201d (${customEvent.endDate.year}) is before its start (${customEvent.date.year}).`))
+			}
+		}
+	}
+
 	// The marriage or union date and the separation date of a partner link, each pair once, on the first of the two people, a date before the birth or after the death of either partner is flagged, and so is a separation that is before the marriage or union, a partner written as plain text has no birth or death to check
 	let seenPartnerKeys = new Set()
 
@@ -1359,7 +1407,7 @@ function closeShortcuts() {
 	document.getElementById(`shortcutsDialog`).close()
 }
 
-// Ctrl or Cmd and S always exports, the browser would otherwise offer to save the page, every other shortcut is a single key and is left alone while typing in a box, while a modifier is held, and while any dialog is open, apart from the keys that close the shortcuts dialog, which is open on its own with nothing typed in it, the single keys are / for the shortcuts, S for the search box, the arrows and E and Enter and Escape for the profile, and while the directory is open the arrows and Enter and Escape are for its rows instead
+// Ctrl or Cmd and S always exports, the browser would otherwise offer to save the page, every other shortcut is a single key and is left alone while typing in a box, while a modifier is held, and while any dialog is open, apart from the keys that close the shortcuts dialog, which is open on its own with nothing typed in it, the single keys are / for the shortcuts, S for the search box, the arrows and E and Enter and Escape for the profile, and Space or * for the significance of a life event that has the focus, because S is already the search, and while the directory is open the arrows and Enter and Escape are for its rows instead
 document.addEventListener(`keydown`, (event) => {
 	if((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === `s`){
 		event.preventDefault()
@@ -1408,6 +1456,12 @@ document.addEventListener(`keydown`, (event) => {
 		event.preventDefault()
 
 		moveProfileFocus(event.key == `ArrowDown` ? 1 : -1)
+	} else if((event.key == ` ` || event.key == `*`) && focusedElement?.matches(`#lifeEvents .event`)){
+		event.preventDefault()
+
+		if(!event.repeat){
+			toggleLifeEventFocusSignificance(focusedElement)
+		}
 	} else if(event.key.toLowerCase() == `e` && focusedElement){
 		event.preventDefault()
 
@@ -2948,6 +3002,7 @@ function applyImport(data) {
 	Object.values(persons).forEach(removeLegacyImageData)
 	Object.values(persons).forEach(sanitizeRelations)
 	Object.values(persons).forEach(sanitizePlaces)
+	Object.values(persons).forEach(sanitizeLifeEvents)
 
 	if(typeof rebuildPlainTextRelationIndex == `function`){
 		rebuildPlainTextRelationIndex()
@@ -2979,6 +3034,7 @@ function startApp() {
 	Object.values(persons).forEach(removeLegacyImageData)
 	Object.values(persons).forEach(sanitizeRelations)
 	Object.values(persons).forEach(sanitizePlaces)
+	Object.values(persons).forEach(sanitizeLifeEvents)
 	localStorage.removeItem(`images`)
 	indexedDB.deleteDatabase(`relationIndexImages`)
 	rebuildPlainTextRelationIndex()

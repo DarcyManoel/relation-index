@@ -171,7 +171,7 @@ function getTimelineAge(birth, date) {
 	return age >= 0 ? age : null
 }
 
-// The dated milestones of the person on screen, oldest first, the birth, the places they lived in or had another connection with that have a year, the births of their children and of their younger siblings and the deaths of their parents and partners that fall in their lifetime, which needs a known birth year, then the marriage or union and the separation of each partner link that has a year of its own, then the death and the places they were buried in, a burial with no year goes right after the death, or at the end when there is no death, each one is { description, isDated, isOwn, sortTime, whenText }, isDated is false for a burial with no year, which has no place on a line of time, isOwn is false for what happened to the family, and the age is the age of the person at that time
+// The dated milestones of the person on screen, oldest first, the birth, the places they lived in or had another connection with that have a year, the births of their children and of their younger siblings and the deaths of their parents and partners that fall in their lifetime, which needs a known birth year, then the marriage or union and the separation of each partner link that has a year of its own, then the custom events that the user wrote, which have a start and may have an end, then the death and the places they were buried in, a burial with no year goes right after the death, or at the end when there is no death, each one is { description, isDated, isOwn, key, sortTime, whenText, significanceKey, isSignificant }, key says which event it is and stays the same when the page is drawn again, the significance of an event is kept on the person under significanceKey, which is the key of the event, or for a custom event the key of the custom event, so the start and the end of one share it, an event is significant unless the person has said it is not, a custom event also has customEventId and, when it has an end, pairId, isDated is false for a burial with no year, which has no place on a line of time, isOwn is false for what happened to the family, and the age is the age of the person at that time
 function getTimelineEvents(personId) {
 	let person = persons[personId]
 
@@ -186,15 +186,17 @@ function getTimelineEvents(personId) {
 	let places = person.places ?? []
 	let events = []
 
-	let addEvent = (date, description, isOwn, shouldShowAge) => {
+	let addEvent = (date, description, isOwn, shouldShowAge, key, extras = {}) => {
 		let age = hasBirthYear && shouldShowAge ? getTimelineAge(birth, date) : null
 
 		events.push({
 			description : description,
 			isDated : true,
 			isOwn : isOwn,
+			key : key,
 			sortTime : getTimelineYear(date),
-			whenText : age == null ? formatDateText(date) : `${formatDateText(date)} \u00b7 Age ${age}`
+			whenText : age == null ? formatDateText(date) : `${formatDateText(date)} \u00b7 Age ${age}`,
+			...extras
 		})
 	}
 	let getPlaceText = (placeKind) => {
@@ -204,7 +206,7 @@ function getTimelineEvents(personId) {
 	}
 
 	if(hasBirthYear){
-		addEvent(birth, `Born${getPlaceText(`born`)}`, true, false)
+		addEvent(birth, `Born${getPlaceText(`born`)}`, true, false, `birth`)
 	}
 
 	for(let place of places){
@@ -221,6 +223,8 @@ function getTimelineEvents(personId) {
 			description : `${place.kind == `lived` ? `Lived in` : `Other place:`} ${place.name}`,
 			isDated : true,
 			isOwn : true,
+			key : `place:${place.kind}:${normalizeNameText(place.name)}:${placeYear}`,
+			placeIndex : places.indexOf(place),
 			sortTime : placeYear,
 			whenText : placeAge == null ? (place.fromYear == null ? `until ${yearsText}` : yearsText) : `${place.fromYear == null ? `until ${yearsText}` : yearsText} \u00b7 Age ${placeAge}`
 		})
@@ -242,7 +246,10 @@ function getTimelineEvents(personId) {
 					continue
 				}
 
-				addEvent(relativeDate, `${descriptionPrefix} ${getNameLabel(relative)}`, false, true)
+				addEvent(relativeDate, `${descriptionPrefix} ${getNameLabel(relative)}`, false, true, `relative:${relationRole}:${entry.personId}`, {
+					relatedPersonId : Number(entry.personId),
+					relationRole : relationRole
+				})
 			}
 		}
 	}
@@ -255,18 +262,37 @@ function getTimelineEvents(personId) {
 		}
 
 		let partnerName = getRelationEntryLabel(entry)
+		let partnerKey = entry.personId ?? `text:${normalizeNameText(entry.text)}`
+		let partnerExtras = {
+			relatedPersonId : entry.personId == null ? null : Number(entry.personId),
+			relationRole : `partners`
+		}
 
 		if(variant.date?.year != null){
-			addEvent(variant.date, `${variant.subtype == `married` ? `Married` : `Partnered with`} ${partnerName}`, true, true)
+			addEvent(variant.date, `${variant.subtype == `married` ? `Married` : `Partnered with`} ${partnerName}`, true, true, `partner:${partnerKey}:start`, partnerExtras)
 		}
 
 		if(variant.subtype == `separated` && variant.endDate?.year != null){
-			addEvent(variant.endDate, `Separated from ${partnerName}`, true, true)
+			addEvent(variant.endDate, `Separated from ${partnerName}`, true, true, `partner:${partnerKey}:end`, partnerExtras)
+		}
+	}
+
+	for(let customEvent of person.customEvents ?? []){
+		let extras = {
+			customEventId : customEvent.id,
+			pairId : customEvent.endDate ? customEvent.id : null,
+			significanceKey : `custom:${customEvent.id}`
+		}
+
+		addEvent(customEvent.date, customEvent.title, true, true, `custom:${customEvent.id}:start`, extras)
+
+		if(customEvent.endDate){
+			addEvent(customEvent.endDate, customEvent.endTitle, true, true, `custom:${customEvent.id}:end`, extras)
 		}
 	}
 
 	if(hasDeathYear){
-		addEvent(death, `Died${getPlaceText(`died`)}`, true, true)
+		addEvent(death, `Died${getPlaceText(`died`)}`, true, true, `death`)
 	}
 
 	let deathTime = hasDeathYear ? getTimelineYear(death) : Infinity
@@ -283,20 +309,46 @@ function getTimelineEvents(personId) {
 				description : `Buried in ${place.name}`,
 				isDated : false,
 				isOwn : true,
+				key : `burial:${normalizeNameText(place.name)}`,
+				placeIndex : places.indexOf(place),
 				sortTime : deathTime + .000001,
 				whenText : `Date unknown`
 			})
 		} else {
-			addEvent({ year : placeYear, month : null, day : null }, `Buried in ${place.name}`, true, true)
+			addEvent({ year : placeYear, month : null, day : null }, `Buried in ${place.name}`, true, true, `burial:${normalizeNameText(place.name)}`, {
+				placeIndex : places.indexOf(place)
+			})
 		}
 	}
 
-	return events.sort((firstEvent, secondEvent) => firstEvent.sortTime < secondEvent.sortTime ? -1 : firstEvent.sortTime > secondEvent.sortTime ? 1 : 0)
+	return events
+		.sort((firstEvent, secondEvent) => firstEvent.sortTime < secondEvent.sortTime ? -1 : firstEvent.sortTime > secondEvent.sortTime ? 1 : 0)
+		.map((event) => {
+			let significanceKey = event.significanceKey ?? event.key
+
+			return {
+				...event,
+				isSignificant : person.eventSignificance?.[significanceKey] !== false,
+				significanceKey : significanceKey
+			}
+		})
 }
 
-// One milestone, a dot on a vertical line on the left, the date with the age in muted grey and the description, the dot of what happened to the person themselves is darker than the dot of what happened to the family, the row shares its index with its dot on the line of time above, so hovering either one can highlight both
+// One milestone, a button on a vertical line on the left that is a star when the event is significant and a smaller dot when it is not, and a click on it changes that, the date with the age in muted grey and the description, the button of what happened to the person themselves is darker than the button of what happened to the family, a custom event can be clicked to edit it, the row shares its index with its dot on the line of time above, so hovering either one can highlight both
 function buildTimelineEventHtml(event, index) {
-	return `<div class="event${event.isOwn ? ` own` : ``}" data-index="${index}" onmouseenter="highlightLifeEvent(${index}, true)" onmouseleave="highlightLifeEvent(${index}, false)"><div class="marker"><div class="dot"></div><div class="line"></div></div><div class="content"><div class="when">${escapeHtml(event.whenText)}</div><div class="description">${escapeHtml(event.description)}</div></div></div>`
+	let significanceKeyArgument = escapeHtml(JSON.stringify(event.significanceKey))
+	let markerHtml = event.isSignificant ? `<svg viewBox="0 0 24 24"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6L2.5 9.4l6.6-.8z"/></svg>` : `<span class="dot"></span>`
+	let contentAttributes = event.customEventId ? ` custom" tabindex="0" onclick="openLifeEventDialog(${escapeHtml(JSON.stringify(event.customEventId))})" onkeydown="handleLifeEventKey(event, ${escapeHtml(JSON.stringify(event.customEventId))})` : ``
+	let dataAttributes = [
+		`data-key="${escapeHtml(event.key)}"`,
+		`data-significance-key="${escapeHtml(event.significanceKey)}"`,
+		event.customEventId ? `data-custom-event-id="${escapeHtml(event.customEventId)}"` : ``,
+		event.placeIndex == null ? `` : `data-place-index="${event.placeIndex}"`,
+		event.relatedPersonId == null ? `` : `data-related-person-id="${event.relatedPersonId}"`,
+		event.relationRole ? `data-relation-role="${escapeHtml(event.relationRole)}"` : ``
+	].filter((attribute) => attribute != ``).join(` `)
+
+	return `<div class="event${event.isOwn ? ` own` : ``}${event.isSignificant ? `` : ` insignificant`}" data-index="${index}" ${dataAttributes} onmouseenter="highlightLifeEvent(${index}, true)" onmouseleave="highlightLifeEvent(${index}, false)"><div class="marker"><button type="button" class="toggle" title="${event.isSignificant ? `Mark as insignificant` : `Mark as significant`}" onclick="toggleLifeEventSignificance(event, ${significanceKeyArgument})">${markerHtml}</button><div class="line"></div></div><div class="content${contentAttributes}"><div class="when">${escapeHtml(event.whenText)}${event.customEventId ? `<span class="edit">edit</span>` : ``}</div><div class="description">${escapeHtml(event.description)}</div></div></div>`
 }
 
 // A row and its dot on the line of time light up together, whichever of the two the mouse is on
@@ -310,25 +362,35 @@ function highlightLifeEvent(index, isHovered) {
 function buildLifeEventDotHtml(event, index, minTime, maxTime) {
 	let leftPercent = roundTimelinePercent(Math.min(Math.max(((event.sortTime - minTime) / (maxTime - minTime)) * 100, 0), 100))
 
-	return `<div class="dot${event.isOwn ? ` own` : ``}" data-index="${index}" title="${escapeHtml(`${event.whenText} \u2013 ${event.description}`)}" style="left: ${leftPercent}%;" onmouseenter="highlightLifeEvent(${index}, true)" onmouseleave="highlightLifeEvent(${index}, false)"></div>`
+	return `<div class="dot${event.isOwn ? ` own` : ``}${event.isSignificant ? `` : ` minor`}" data-index="${index}" title="${escapeHtml(`${event.whenText} \u2013 ${event.description}`)}" style="left: ${leftPercent}%;" onmouseenter="highlightLifeEvent(${index}, true)" onmouseleave="highlightLifeEvent(${index}, false)"></div>`
 }
 
-// The line of time of the person with a dot for each dated event, from the earliest time of the events or the birth at 0% to the latest time of the events or the end of the life at 100%, the bar of the lifespan has the tint of the gender and fades at the right edge when the person is living, a person with no known lifespan has the line and the dots only, and under it the list of every event, an event with no year is only in the list
-function buildLifeEventsBodyHtml(personId, events) {
+// The line of time of the person with a dot for each dated event, from the earliest time of the events or the birth at 0% to the latest time of the events or the end of the life at 100%, the bar of the lifespan has the tint of the gender and fades at the right edge when the person is living, a person with no known lifespan has the line and the dots only, and under it the list of the events that are shown, an event with no year is only in the list, the line is always as long as it is with every event on it, so choosing between the significant events and all of them never moves a dot, and only the events that are shown get a dot
+function buildLifeEventsBodyHtml(personId, visibleEvents, allEvents) {
 	let entry = getTimelineEntry(personId, true)
-	let datedTimes = events.filter((event) => event.isDated).map((event) => event.sortTime)
-	let minTime = Math.min(...datedTimes, ...(entry ? [entry.startTime] : []))
-	let maxTime = Math.max(...datedTimes, ...(entry ? [entry.endTime] : []))
+	let datedTimes = allEvents.filter((event) => event.isDated).map((event) => event.sortTime)
+	let trackHtml = ``
 
-	if(maxTime <= minTime){
-		maxTime = minTime + 1
+	if(datedTimes.length > 0 || entry){
+		let minTime = Math.min(...datedTimes, ...(entry ? [entry.startTime] : []))
+		let maxTime = Math.max(...datedTimes, ...(entry ? [entry.endTime] : []))
+
+		if(maxTime <= minTime){
+			maxTime = minTime + 1
+		}
+
+		let layout = entry ? getTimelineRowLayout(entry, minTime, maxTime) : null
+		let barHtml = entry ? `<div class="bar ${escapeHtml(entry.genderValue)}${entry.isLiving ? ` living` : ``}" style="left: ${layout.leftPercent}%; width: ${layout.widthPercent}%;"></div>` : ``
+		let dotsHtml = visibleEvents.map((event, index) => event.isDated ? buildLifeEventDotHtml(event, index, minTime, maxTime) : ``).join(``)
+
+		trackHtml = `<div class="track">${barHtml}${dotsHtml}</div>`
 	}
 
-	let layout = entry ? getTimelineRowLayout(entry, minTime, maxTime) : null
-	let barHtml = entry ? `<div class="bar ${escapeHtml(entry.genderValue)}${entry.isLiving ? ` living` : ``}" style="left: ${layout.leftPercent}%; width: ${layout.widthPercent}%;"></div>` : ``
-	let dotsHtml = events.map((event, index) => event.isDated ? buildLifeEventDotHtml(event, index, minTime, maxTime) : ``).join(``)
+	if(visibleEvents.length < 1){
+		return `<div class="lifeEventsBody">${trackHtml}<div class="none">${allEvents.length < 1 ? `No dated events yet` : `No significant events, switch to All to see the others`}</div></div>`
+	}
 
-	return `<div class="lifeEventsBody"><div class="track">${barHtml}${dotsHtml}</div><div class="events">${events.map(buildTimelineEventHtml).join(``)}</div></div>`
+	return `<div class="lifeEventsBody">${trackHtml}<div class="events">${visibleEvents.map(buildTimelineEventHtml).join(``)}</div></div>`
 }
 
 // Draws the family timeline of the person on screen in its own island, and nothing when there is nothing to draw
@@ -348,17 +410,464 @@ function clearLifeEvents() {
 	document.getElementById(`lifeEvents`).innerHTML = ``
 }
 
-// Draws the life events of the person on screen in their own island under the relations and the family timeline, the two islands are independent and both can be on screen, nothing is drawn when the person has no event with a year
+// Which events the island shows, false for the significant ones only and true for all of them, it is kept here and not for each person, so it stays the same when another person is opened
+let lifeEventsShowAll = false
+
+// The person that the life events were drawn for last, so a click on a star, on the filter or on Add Event knows whose events they are
+let renderedLifeEventsPersonId = null
+
+// The significance of an event is kept on the person as eventSignificance, an object from the significanceKey of an event to false, only the events that are not significant are in it, so a person with none has no such property, this puts one event in or takes it out
+function setLifeEventSignificance(person, significanceKey, isSignificant) {
+	let overrides = { ...(person.eventSignificance ?? {}) }
+
+	if(isSignificant){
+		delete overrides[significanceKey]
+	} else {
+		overrides[significanceKey] = false
+	}
+
+	if(Object.keys(overrides).length == 0){
+		delete person.eventSignificance
+	} else {
+		person.eventSignificance = overrides
+	}
+}
+
+// What was said about an event that is not there any more is taken away, such as the birth of a child who was removed or a place that was changed, this is done every time the events are drawn, because the events are worked out from the other data, and it is saved only when something was taken away
+function pruneLifeEventSignificance(personId, events) {
+	let person = persons[personId]
+	let overrides = person?.eventSignificance
+
+	if(!overrides){
+		return
+	}
+
+	let validKeys = new Set(events.map((event) => event.significanceKey))
+	let orphanKeys = Object.keys(overrides).filter((significanceKey) => !validKeys.has(significanceKey))
+
+	if(orphanKeys.length == 0){
+		return
+	}
+
+	for(let orphanKey of orphanKeys){
+		setLifeEventSignificance(person, orphanKey, true)
+	}
+
+	saveData()
+}
+
+// Draws the life events again without the page jumping, the island is built again and its height can change for a moment, so the place on the page is put back
+function redrawLifeEventsKeepingScroll() {
+	let scrollTop = document.scrollingElement.scrollTop
+
+	renderLifeEvents(renderedLifeEventsPersonId)
+
+	document.scrollingElement.scrollTop = scrollTop
+}
+
+function setLifeEventsFilter(showAll) {
+	lifeEventsShowAll = showAll
+
+	redrawLifeEventsKeepingScroll()
+}
+
+// A click on the star or the dot of an event, the event changes between significant and not, it is saved, which counts as a change for the backup note, and both the line of time and the list are drawn again, a click on the button must not also open the event, so it is stopped here
+function toggleLifeEventSignificance(event, significanceKey) {
+	event.stopPropagation()
+
+	let person = persons[renderedLifeEventsPersonId]
+
+	if(!person){
+		return
+	}
+
+	setLifeEventSignificance(person, significanceKey, person.eventSignificance?.[significanceKey] === false)
+	saveData()
+	redrawLifeEventsKeepingScroll()
+}
+
+// A year, a month and a day that is a date, the year has to be there, anything else is no date
+function sanitizeLifeEventDate(date) {
+	let sanitizedDate = sanitizePartnerDate(date)
+
+	return sanitizedDate && sanitizedDate.year != null ? sanitizedDate : null
+}
+
+function generateLifeEventId() {
+	return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+}
+
+// One custom event made safe, { id, title, date, endTitle, endDate, note, links }, the title and a date with a year are needed, the end is only kept when it has both a title and a date with a year, and an id that is missing or used already is replaced, the answer is null for an event that is not valid
+function sanitizeCustomEvent(customEvent, usedIds) {
+	let title = typeof customEvent.title == `string` ? customEvent.title.trim().replace(/\s+/g, ` `) : ``
+	let date = sanitizeLifeEventDate(customEvent.date)
+
+	if(title == `` || !date){
+		return null
+	}
+
+	let id = typeof customEvent.id == `string` && customEvent.id != `` && !usedIds.has(customEvent.id) ? customEvent.id : generateLifeEventId()
+	let endTitle = typeof customEvent.endTitle == `string` ? customEvent.endTitle.trim().replace(/\s+/g, ` `) : ``
+	let endDate = sanitizeLifeEventDate(customEvent.endDate)
+	let note = typeof customEvent.note == `string` ? customEvent.note.trim() : ``
+
+	usedIds.add(id)
+
+	return {
+		id : id,
+		title : title,
+		date : date,
+		...(endTitle != `` && endDate ? { endTitle : endTitle, endDate : endDate } : {}),
+		...(note == `` ? {} : { note : note }),
+		links : sanitizeLinks(customEvent)
+	}
+}
+
+// What a person written into a file by hand or by an older version may hold is made safe, customEvents and eventSignificance are left off when they are empty, this is done when the page starts and when a file is imported
+function sanitizeLifeEvents(person) {
+	if(person.eventSignificance !== undefined){
+		let overrides = isPlainObject(person.eventSignificance) ? Object.fromEntries(Object.entries(person.eventSignificance).filter(([significanceKey, value]) => significanceKey != `` && value === false)) : {}
+
+		if(Object.keys(overrides).length == 0){
+			delete person.eventSignificance
+		} else {
+			person.eventSignificance = overrides
+		}
+	}
+
+	if(person.customEvents !== undefined){
+		let usedIds = new Set()
+		let customEvents = (Array.isArray(person.customEvents) ? person.customEvents : [])
+			.filter(isPlainObject)
+			.map((customEvent) => sanitizeCustomEvent(customEvent, usedIds))
+			.filter((customEvent) => customEvent)
+
+		if(customEvents.length == 0){
+			delete person.customEvents
+		} else {
+			person.customEvents = customEvents
+		}
+	}
+}
+
+// Draws the life events of the person on screen in their own island under the relations and the family timeline, the two islands are independent and both can be on screen, the heading has Add Event and next to it the filter between the significant events and all of them, the island is always drawn for a person, so an event can be added to a person who has none yet, and the significance of events that are gone is cleaned up first
 function renderLifeEvents(personId) {
 	personId = Number(personId)
+	renderedLifeEventsPersonId = personId
 
-	let events = getTimelineEvents(personId)
-
-	if(!events.some((event) => event.isDated)){
+	if(!persons[personId]){
 		clearLifeEvents()
 
 		return
 	}
 
-	document.getElementById(`lifeEvents`).innerHTML = `<div class="heading"><span>Life events</span></div>${buildLifeEventsBodyHtml(personId, events)}`
+	let events = getTimelineEvents(personId)
+
+	pruneLifeEventSignificance(personId, events)
+
+	let visibleEvents = lifeEventsShowAll ? events : events.filter((event) => event.isSignificant)
+	let headerHtml = `<div class="header"><div class="heading" onclick="openLifeEventDialog()"><span>Life events</span><span class="action">+ Add Event</span></div><div class="filter"><span class="option${lifeEventsShowAll ? `` : ` selected`}" onclick="setLifeEventsFilter(false)">Significant</span><span class="option${lifeEventsShowAll ? ` selected` : ``}" onclick="setLifeEventsFilter(true)">All</span></div></div>`
+
+	document.getElementById(`lifeEvents`).innerHTML = `${headerHtml}${buildLifeEventsBodyHtml(personId, visibleEvents, events)}`
+}
+
+// What the dialog is working on, whose event it is, which custom event it is when one is edited, and whether the event is significant, the rest is in the boxes
+let lifeEventDraft = {
+	personId : null,
+	eventId : null,
+	isSignificant : true
+}
+
+function getLifeEventDateTexts(date) {
+	return {
+		day : date?.day == null ? `` : `${date.day}`,
+		month : date?.month == null ? `` : `${date.month}`,
+		year : date?.year == null ? `` : `${date.year}`.padStart(4, `0`)
+	}
+}
+
+function readLifeEventDateTexts(prefix) {
+	return {
+		day : document.getElementById(`${prefix}Day`).value.trim(),
+		month : document.getElementById(`${prefix}Month`).value.trim(),
+		year : document.getElementById(`${prefix}Year`).value.trim()
+	}
+}
+
+function writeLifeEventDateTexts(prefix, texts) {
+	document.getElementById(`${prefix}Day`).value = texts.day
+	document.getElementById(`${prefix}Month`).value = texts.month
+	document.getElementById(`${prefix}Year`).value = texts.year
+}
+
+function buildLifeEventDateFromTexts(texts) {
+	return sanitizeLifeEventDate({
+		year : texts.year == `` ? null : Number(texts.year),
+		month : texts.month == `` ? null : Number(texts.month),
+		day : texts.day == `` ? null : Number(texts.day)
+	})
+}
+
+function isLifeEventDateTextsEmpty(texts) {
+	return texts.day == `` && texts.month == `` && texts.year == ``
+}
+
+function renderLifeEventSignificanceChoices() {
+	document.getElementById(`lifeEventSignificanceChoices`).innerHTML = [[true, `Significant \u2605`], [false, `Insignificant \u2022`]]
+		.map(([isSignificant, label]) => `<div class="choice${lifeEventDraft.isSignificant === isSignificant ? ` selected` : ``}" onclick="chooseLifeEventSignificance(${isSignificant})">${label}</div>`)
+		.join(``)
+}
+
+function chooseLifeEventSignificance(isSignificant) {
+	lifeEventDraft.isSignificant = isSignificant
+
+	renderLifeEventSignificanceChoices()
+}
+
+function showLifeEventIssue(message, elementId = null) {
+	document.getElementById(`lifeEventIssue`).textContent = message == `` ? `` : `\u26a0 ${message}`
+
+	if(elementId){
+		document.getElementById(elementId).classList.add(`invalid`)
+	}
+}
+
+// The title of the end only shows when something is typed for the end date, because an end date needs a title of its own
+function updateLifeEventDialog() {
+	for(let element of document.querySelectorAll(`#lifeEventDialog .invalid`)){
+		element.classList.remove(`invalid`)
+	}
+
+	showLifeEventIssue(``)
+
+	document.getElementById(`lifeEventEndTitle`).hidden = isLifeEventDateTextsEmpty(readLifeEventDateTexts(`lifeEventEnd`))
+}
+
+// Opens the dialog empty to add an event, or filled with the custom event that was asked for, an event with an end is one event with both its halves, Delete is only there for an event that exists
+function openLifeEventDialog(customEventId = null) {
+	let person = persons[renderedLifeEventsPersonId]
+
+	if(!person){
+		return
+	}
+
+	let customEvent = customEventId == null ? null : (person.customEvents ?? []).find((candidateEvent) => candidateEvent.id == customEventId)
+
+	lifeEventDraft.personId = renderedLifeEventsPersonId
+	lifeEventDraft.eventId = customEvent?.id ?? null
+	lifeEventDraft.isSignificant = customEvent ? person.eventSignificance?.[`custom:${customEvent.id}`] !== false : true
+
+	document.getElementById(`lifeEventDialogTitle`).textContent = customEvent ? `Edit event` : `Add event`
+	document.getElementById(`lifeEventStartTitle`).value = customEvent?.title ?? ``
+	document.getElementById(`lifeEventEndTitle`).value = customEvent?.endTitle ?? ``
+	document.getElementById(`lifeEventNote`).value = customEvent?.note ?? ``
+	document.getElementById(`lifeEventDelete`).hidden = !customEvent
+
+	writeLifeEventDateTexts(`lifeEventStart`, getLifeEventDateTexts(customEvent?.date))
+	writeLifeEventDateTexts(`lifeEventEnd`, getLifeEventDateTexts(customEvent?.endDate))
+	renderLifeEventSignificanceChoices()
+	renderDynamicLinks(`lifeEventLinks`, customEvent ? [...customEvent.links] : [], () => updateLifeEventDialog())
+	updateLifeEventDialog()
+
+	document.getElementById(`lifeEventDialog`).showModal()
+}
+
+function closeLifeEventDialog() {
+	document.getElementById(`lifeEventDialog`).close()
+}
+
+// Enter on a custom event of the list opens it, like a click
+function handleLifeEventKey(event, customEventId) {
+	if(event.key == `Enter`){
+		event.preventDefault()
+
+		openLifeEventDialog(customEventId)
+	}
+}
+
+// What is wrong with what was typed, as { message, elementId }, or null, the title and a year of the start are needed, a date has to follow the rules of the birth and death dates, and when there is an end date it needs a year, a title and to be after the start
+function getLifeEventDraftIssue(startTexts, endTexts) {
+	if(document.getElementById(`lifeEventStartTitle`).value.trim() == ``){
+		return {
+			message : `The event needs a title.`,
+			elementId : `lifeEventStartTitle`
+		}
+	}
+
+	if(startTexts.year == ``){
+		return {
+			message : `The date needs a year.`,
+			elementId : `lifeEventStartYear`
+		}
+	}
+
+	let startIssue = getDateIssue(startTexts.day, startTexts.month, startTexts.year)
+
+	if(startIssue != ``){
+		return {
+			message : `Date: ${startIssue}`,
+			elementId : `lifeEventStartYear`
+		}
+	}
+
+	if(isLifeEventDateTextsEmpty(endTexts)){
+		return null
+	}
+
+	if(endTexts.year == ``){
+		return {
+			message : `The end date needs a year.`,
+			elementId : `lifeEventEndYear`
+		}
+	}
+
+	let endIssue = getDateIssue(endTexts.day, endTexts.month, endTexts.year)
+
+	if(endIssue != ``){
+		return {
+			message : `End date: ${endIssue}`,
+			elementId : `lifeEventEndYear`
+		}
+	}
+
+	if(document.getElementById(`lifeEventEndTitle`).value.trim() == ``){
+		return {
+			message : `The end event needs a title.`,
+			elementId : `lifeEventEndTitle`
+		}
+	}
+
+	if(compareAuditDates(buildLifeEventDateFromTexts(endTexts), buildLifeEventDateFromTexts(startTexts)) < 0){
+		return {
+			message : `The end date is before the start date.`,
+			elementId : `lifeEventEndYear`
+		}
+	}
+
+	return null
+}
+
+// Saves the event as one custom event on the person, with its end when there is one, so clearing the end date makes it a single event again and adding one makes it a pair, its significance is the one that was chosen, and the line of time and the list are drawn again
+function saveLifeEvent(event) {
+	event.preventDefault()
+
+	let person = persons[lifeEventDraft.personId]
+
+	if(!person){
+		return
+	}
+
+	let startTexts = readLifeEventDateTexts(`lifeEventStart`)
+	let endTexts = readLifeEventDateTexts(`lifeEventEnd`)
+	let issue = getLifeEventDraftIssue(startTexts, endTexts)
+
+	if(issue){
+		showLifeEventIssue(issue.message, issue.elementId)
+
+		return
+	}
+
+	let hasEnd = !isLifeEventDateTextsEmpty(endTexts)
+	let customEvent = sanitizeCustomEvent({
+		id : lifeEventDraft.eventId ?? generateLifeEventId(),
+		title : document.getElementById(`lifeEventStartTitle`).value,
+		date : buildLifeEventDateFromTexts(startTexts),
+		endTitle : hasEnd ? document.getElementById(`lifeEventEndTitle`).value : ``,
+		endDate : hasEnd ? buildLifeEventDateFromTexts(endTexts) : null,
+		note : document.getElementById(`lifeEventNote`).value,
+		links : readDynamicLinks(`lifeEventLinks`)
+	}, new Set())
+	let customEvents = person.customEvents ?? []
+	let existingIndex = customEvents.findIndex((candidateEvent) => candidateEvent.id == customEvent.id)
+
+	if(existingIndex == -1){
+		customEvents.push(customEvent)
+	} else {
+		customEvents[existingIndex] = customEvent
+	}
+
+	person.customEvents = customEvents
+
+	setLifeEventSignificance(person, `custom:${customEvent.id}`, lifeEventDraft.isSignificant)
+	saveData()
+	closeLifeEventDialog()
+	redrawLifeEventsKeepingScroll()
+}
+
+// Takes the custom event away with both of its halves and what was said about its significance
+function deleteLifeEvent() {
+	let person = persons[lifeEventDraft.personId]
+
+	if(!person || lifeEventDraft.eventId == null){
+		return
+	}
+
+	let customEvents = (person.customEvents ?? []).filter((candidateEvent) => candidateEvent.id != lifeEventDraft.eventId)
+
+	if(customEvents.length == 0){
+		delete person.customEvents
+	} else {
+		person.customEvents = customEvents
+	}
+
+	setLifeEventSignificance(person, `custom:${lifeEventDraft.eventId}`, true)
+	saveData()
+	closeLifeEventDialog()
+	redrawLifeEventsKeepingScroll()
+}
+
+// What E does on the place of the life events that has the keyboard focus, the heading adds an event, a custom event opens its dialog, the birth and the death open their dates, a place or a burial opens the places dialog on that place, the birth or death of a relative and the dates of a partner open the relations dialog on that list, and anything else changes whether the event is significant
+function editLifeEventFocus(element) {
+	if(element.matches(`.heading`)){
+		openLifeEventDialog()
+	} else if(element.dataset.customEventId){
+		openLifeEventDialog(element.dataset.customEventId)
+	} else if(element.dataset.key == `birth`){
+		editBirth()
+	} else if(element.dataset.key == `death`){
+		editDeath()
+	} else if(element.dataset.placeIndex !== undefined){
+		openPlacesDialog(Number(element.dataset.placeIndex))
+	} else if(element.dataset.relationRole){
+		openRelationsDialog(element.dataset.relationRole)
+	} else {
+		toggleLifeEventFocusSignificance(element)
+	}
+}
+
+// What Enter does on the place of the life events that has the keyboard focus, an event about a relative or a partner who has a page opens that page, and the first relation of it gets the focus, like Enter on a relation, everything else is the same as E
+function openLifeEventFocus(element) {
+	if(element.matches(`.event`) && element.dataset.relatedPersonId){
+		focusFirstRelationOnLoad = true
+
+		viewPerson(Number(element.dataset.relatedPersonId))
+	} else {
+		editLifeEventFocus(element)
+	}
+}
+
+// Puts the keyboard focus back on an event after the island was drawn again, on the same event when it is still shown, and otherwise on the place of the list where it was, which is the next event when the one that was changed has gone from the list of the significant events
+function restoreLifeEventFocus(eventKey, previousFocusIndex) {
+	let targets = getProfileNavTargets()
+	let eventFocusIndex = targets.findIndex((target) => target.matches(`#lifeEvents .event`) && target.dataset.key == eventKey)
+
+	setProfileFocus(eventFocusIndex == -1 ? Math.min(previousFocusIndex, targets.length - 1) : eventFocusIndex)
+}
+
+// The key of the star: Space or * changes the event that has the keyboard focus between significant and not, saved like a click on the star, and the focus stays where it was
+function toggleLifeEventFocusSignificance(element) {
+	let person = persons[renderedLifeEventsPersonId]
+	let significanceKey = element.dataset.significanceKey
+
+	if(!person || !significanceKey){
+		return
+	}
+
+	let eventKey = element.dataset.key
+	let previousFocusIndex = profileFocusIndex
+
+	setLifeEventSignificance(person, significanceKey, person.eventSignificance?.[significanceKey] === false)
+	saveData()
+	redrawLifeEventsKeepingScroll()
+	restoreLifeEventFocus(eventKey, previousFocusIndex)
 }

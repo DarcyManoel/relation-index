@@ -1006,15 +1006,82 @@ body{
 			&:empty{
 				display: none;
 			}
-			>.heading{
-				color: grey;
-				font-size: .8em;
-				letter-spacing: .1em;
+			&:focus-within,
+			&:has(.kbdFocus),
+			&:hover{
+				>.header>.heading>.action{
+					opacity: 1;
+					pointer-events: auto;
+				}
+			}
+			>.header{
+				align-items: center;
+				display: flex;
+				gap: .5em;
+				justify-content: space-between;
 				margin-bottom: .5em;
-				text-transform: uppercase;
-				user-select: none;
+				>.heading{
+					align-items: baseline;
+					border-radius: .25em;
+					color: grey;
+					cursor: pointer;
+					display: flex;
+					font-size: .8em;
+					gap: .5em;
+					letter-spacing: .1em;
+					padding: 0 .25em;
+					scroll-margin: 3em 0;
+					text-transform: uppercase;
+					user-select: none;
+					&.kbdFocus,
+					&:hover{
+						background: rgba(200, 200, 200, .3);
+					}
+					&.kbdFocus>.action{
+						opacity: 1;
+						pointer-events: auto;
+					}
+					>.action{
+						opacity: 0;
+						pointer-events: none;
+						transition: opacity .15s;
+						@media (hover: none){
+							opacity: 1;
+							pointer-events: auto;
+						}
+						&:hover{
+							color: black;
+						}
+					}
+				}
+				>.filter{
+					background: rgba(200, 200, 200, .3);
+					border-radius: .75em;
+					display: flex;
+					flex: none;
+					font-size: .8em;
+					padding: .15em;
+					user-select: none;
+					>.option{
+						border-radius: .6em;
+						color: grey;
+						cursor: pointer;
+						padding: 0 .75em;
+						&:hover{
+							color: black;
+						}
+						&.selected{
+							background: #ffffff;
+							color: black;
+						}
+					}
+				}
 			}
 			>.lifeEventsBody{
+				>.none{
+					color: grey;
+					font-size: .9em;
+				}
 				>.track{
 					height: 1.5em;
 					margin: .25em .5em 1em;
@@ -1075,7 +1142,14 @@ body{
 						&.own{
 							background: #333333;
 						}
-						&.hovered{
+						&.minor{
+							border-width: .08em;
+							height: .5em;
+							opacity: .55;
+							width: .5em;
+						}
+						&.hovered,
+						&.kbdFocus{
 							transform: translate(-50%, -50%) scale(1.5);
 						}
 					}
@@ -1088,38 +1162,62 @@ body{
 						display: flex;
 						gap: .75em;
 						padding-bottom: .9em;
+						scroll-margin: 3em 0;
 						&:last-child{
 							padding-bottom: 0;
 							>.marker>.line{
 								display: none;
 							}
 						}
-						&.hovered>.content{
+						&.hovered>.content,
+						&.kbdFocus>.content{
 							background: rgba(200, 200, 200, .3);
 							border-radius: .35em;
 							margin: 0 -.35em;
 							padding: 0 .35em;
 						}
-						&.hovered>.marker>.dot{
-							transform: scale(1.4);
+						&.hovered>.marker>.toggle,
+						&.kbdFocus>.marker>.toggle{
+							transform: scale(1.3);
 						}
-						&.own>.marker>.dot{
-							background: #333333;
+						&.kbdFocus>.content>.when>.edit{
+							opacity: 1;
+						}
+						&.own>.marker>.toggle{
+							color: #333333;
 						}
 						>.marker{
 							align-items: center;
 							display: flex;
 							flex: none;
 							flex-direction: column;
-							width: .7em;
-							>.dot{
-								background: rgba(150, 150, 150, .7);
-								border-radius: 50%;
+							width: 1em;
+							>.toggle{
+								align-items: center;
+								background: none;
+								border: none;
+								color: rgba(150, 150, 150, .9);
+								cursor: pointer;
+								display: flex;
 								flex: none;
-								height: .7em;
-								margin-top: .3em;
+								font: inherit;
+								height: 1em;
+								justify-content: center;
+								margin-top: .2em;
+								padding: 0;
 								transition: transform .15s;
-								width: .7em;
+								width: 1em;
+								>svg{
+									fill: currentColor;
+									height: 1em;
+									width: 1em;
+								}
+								>.dot{
+									background: currentColor;
+									border-radius: 50%;
+									height: .45em;
+									width: .45em;
+								}
 							}
 							>.line{
 								background: rgba(150, 150, 150, .3);
@@ -1130,9 +1228,23 @@ body{
 						>.content{
 							display: flex;
 							flex-direction: column;
+							&.custom{
+								cursor: pointer;
+								&:focus-visible>.when>.edit,
+								&:hover>.when>.edit{
+									opacity: 1;
+								}
+							}
 							>.when{
 								color: grey;
 								font-size: .8em;
+								>.edit{
+									margin-left: .5em;
+									opacity: 0;
+									@media (hover: none){
+										opacity: 1;
+									}
+								}
 							}
 						}
 					}
@@ -1410,6 +1522,7 @@ body{
 		&#addRelationDialog,
 		&#auditDialog,
 		&#importDialog,
+		&#lifeEventDialog,
 		&#placeConnectionsDialog,
 		&#placesDialog,
 		&#relationsDialog{
@@ -1848,6 +1961,7 @@ body{
 					border-radius: 1em;
 				}
 			}
+			>.lifeEventDates,
 			>.partnerDates{
 				display: flex;
 				flex-direction: column;
@@ -1968,6 +2082,7 @@ body{
 			>.nameInputs,
 			.newPersonFields>.dateInputs,
 			.newPersonFields>.nameInputs,
+			.lifeEventDates>.dateInputs,
 			.partnerDates>.dateInputs{
 				display: flex;
 				gap: .5em;
@@ -2032,6 +2147,12 @@ body{
 					cursor: pointer;
 					font: inherit;
 					padding: .5em 1em;
+					&.delete{
+						margin-right: auto;
+						&:hover{
+							color: red;
+						}
+					}
 					&.replace:hover{
 						color: red;
 					}
